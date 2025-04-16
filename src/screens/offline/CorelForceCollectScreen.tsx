@@ -774,10 +774,12 @@ export const CorelForceCollectScreen: React.FC<{
 
     const showModalSync = async () => {
 
+        console.log('showModalSync');
         const plantId = await getPlantSelectedStore();
 
         const surveys = await mapByAssetsGroup(plantId);
 
+        console.log(surveys);
         setSurveysToSync(surveys);
         setModalSyncVisible(true);
     };
@@ -965,7 +967,7 @@ export const CorelForceCollectScreen: React.FC<{
                     {renderSelectorDates()}
                     <Icon name="camera" size={24} color="black"/>
                     <TouchableOpacity style={styles.filterButton} onPress={() => showModalAlertDelete(true)}>
-                        <Icon name="trash" size={24} color="red"/>
+                        <Icon name="calendar" size={24} color="red"/>
                     </TouchableOpacity>
 
                 </View>

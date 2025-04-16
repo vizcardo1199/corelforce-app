@@ -1,9 +1,11 @@
-import {diffInMinutes, findPointForCollectData} from './utilService';
+import {diffInMinutes, findPointForCollectData, findPointForCollectDataByMawoiId} from './utilService';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {SurveyStore} from '../../types/survey-store';
 import {Survey} from '../../types/survey';
 import {CollectData} from '../../types/collect-data';
 import {SurveySync} from '../../types/survey-sync';
+import {database} from "../../database";
+import {Q} from "@nozbe/watermelondb";
 
 export const mapSurveyForSync = (mawoisStore) => {
     const syncSurvey = groupPointsByDate(mawoisStore);
@@ -152,12 +154,58 @@ export const mapSurveyForSync = (mawoisStore) => {
     return surveys;
 };
 export const mapByAssetsGroup = async (plantId: number): Promise<SurveySync[]> => {
-    const surveysString = await AsyncStorage.getItem('surveys');
-    let allSurveys: SurveyStore[] = JSON.parse(surveysString || '[]');
+    const surveysCollection = database.get<Survey>('surveys');
 
-    allSurveys = allSurveys.filter((survey: SurveyStore) => survey.plantId === plantId);
+    // 🔍 Buscar encuestas por planta
+    const surveys = await surveysCollection.query(
+        Q.where('plant_id', plantId)
+    ).fetch();
 
-    return generateSurveysToSync(generateSurveys(allSurveys));
+    // 🔁 Mapear cada survey y cargar sus collects
+    const surveyStores: SurveyStore[] = [];
+
+    for (const survey of surveys) {
+        const collects = await survey.collects.fetch();
+
+        const surveyStore: SurveyStore = {
+            assetId: survey.assetId,
+            assetDescription: survey.assetDescription,
+            isMonoaxial: survey.isMonoaxial,
+            pointId: survey.pointId,
+            pointCode: survey.pointCode,
+            pointDescription: survey.pointDescription,
+            plantId: survey.plantId,
+            plantDescription: survey.plantDescription,
+            collects: collects.map((collect) => ({
+                date: collect.date,
+                time: collect.time,
+                uuid: collect.uuid,
+                synced: collect.synced,
+                NEXT_X_W: JSON.parse(collect.nextXW),
+                NEXT_X_S: JSON.parse(collect.nextXS),
+                NEXT_Y_W: JSON.parse(collect.nextYW),
+                NEXT_Y_S: JSON.parse(collect.nextYS),
+                NEXT_Z_W: JSON.parse(collect.nextZW),
+                NEXT_Z_S: JSON.parse(collect.nextZS),
+                vars: JSON.parse(collect.vars),
+            })),
+        };
+
+        surveyStores.push(surveyStore);
+    }
+
+    // 📦 Armar el objeto para sincronizar
+    const grouped = generateSurveys(surveyStores);
+    // console.log( await generateSurveysToSync(grouped));
+    generateSurveysToSync(grouped)
+        .then((value) => {
+            console.log(value);
+        })
+        .catch((error) => {
+            console.error('Error');
+            console.error(error);
+        });
+    return await generateSurveysToSync(grouped);
 };
 
 export const saveCollectDataSynced = async (uuids: string[]) => {
@@ -176,121 +224,89 @@ export const saveCollectDataSynced = async (uuids: string[]) => {
     await AsyncStorage.setItem('surveys', JSON.stringify(allSurveys));
 };
 
-export const generateSurveysToSync = (data: Survey[]): SurveySync[] => {
-    return data.map((survey: Survey) => {
-        const detail: SurveySync = {
-            date: survey.startDate,
-            mawoiId: survey.assetId,
-            assetDescription: survey.assetDescription,
-            points: survey.points.map((point) => point.code),
-            vars: [],
-            waveform: [],
-            spectrum: [],
-            uuids: data.map((survey) => survey.points.map((point) => point.uuid)).flat(),
-        };
+export const generateSurveysToSync = async (data: Survey[]): Promise<SurveySync[]> => {
+    console.log('generateSurveysToSync')
+    const result = await Promise.all(
+        data.map(async (survey: Survey) => {
+            const detail: SurveySync = {
+                date: survey.startDate,
+                mawoiId: survey.assetId,
+                assetDescription: survey.assetDescription,
+                points: survey.points.map((point) => point.code?.slice(0, -1)),
+                vars: [],
+                waveform: [],
+                spectrum: [],
+                uuids: survey.points.map((point) => point.uuid),
+            };
 
+            const {mawoi: mawoiInMemory} = await findPointForCollectDataByMawoiId(survey.assetId)!;
+            survey.points.forEach((point) => {
+                const { pointDescription, code, pointId, collect } = point;
+                const vars = collect?.vars;
 
-        survey.points.forEach((point) => {
-            const { pointDescription, code, pointId, collect } = point;
-            const vars = collect.vars;
+                const pointCode = point.code.slice(0, -1);
+                let pointX = null;
+                let pointY = null;
+                let pointZ = null;
 
-            let pointX: typeof point | null | undefined = null;
-            let pointY: typeof point | null | undefined = null;
-            let pointZ: typeof point | null | undefined = null;
+                if (survey.isMonoaxial) {
+                    pointX = point;
+                } else {
+                    pointX = mawoiInMemory.points.find((p) =>
+                        (p.code == pointCode + "X") || p.code == pointCode + "H"
+                    );
+                    pointY = mawoiInMemory.points.find((p) =>
+                        (p.code == pointCode + "Y") || p.code == pointCode + "V"
+                    );
+                    pointZ = mawoiInMemory.points.find((p) =>
+                        (p.code == pointCode + "Z") || p.code == pointCode + "A"
+                    );
+                }
 
-            // Asignar ejes según si es monoaxial
-            if (survey.isMonoaxial) {
-                pointX = point; // único eje
-            } else {
-                // Buscar los ejes correspondientes en los demás puntos del mismo survey
-                pointX = survey.points.find(
-                    (p) =>
-                        (p.code.endsWith('X') || p.code.endsWith('H')) && p.code == point?.code
-                );
-                pointY = survey.points.find(
-                    (p) =>
-                        (p.code.endsWith('Y') || p.code.endsWith('V'))  && p.code == point?.code
-                );
-                pointZ = survey.points.find(
-                    (p) =>
-                        (p.code.endsWith('Z') || p.code.endsWith('A'))  && p.code == point?.code
-                );
-            }
+                if (vars) {
+                    const varsData = {
+                        fmax: vars.fMax.toString(),
+                        rpm: vars.rpm.toString(),
+                        revolution: vars.rev.toString(),
+                    };
+                    if (pointX) detail.vars.push({ ...varsData, pointId: pointX.id.toString() });
+                    if (pointY) detail.vars.push({ ...varsData, pointId: pointY.id.toString() });
+                    if (pointZ) detail.vars.push({ ...varsData, pointId: pointZ.id.toString() });
+                }
 
+                if (pointX) {
+                    collect?.NEXT_X_W?.forEach((value) =>
+                        detail.waveform.push({ pointId: pointX.id, pointCode: pointX.code, measure_y: value })
+                    );
+                    collect?.NEXT_X_S?.forEach((value) =>
+                        detail.spectrum.push({ pointId: pointX.id, pointCode: pointX.code, measure_y: value })
+                    );
+                }
 
-            if (vars) {
-                if (pointX) {detail.vars.push({
-                    pointId: pointX.pointId.toString(), fmax: point.collect?.vars?.fMax.toString()!,
-                    rpm: point.collect.vars?.rpm.toString()!,
-                    revolution: point.collect.vars?.rev.toString()!,
-                });}
-                if (pointY) {detail.vars.push({
-                    pointId: pointY.pointId.toString(), fmax: point.collect?.vars?.fMax.toString()!,
-                    rpm: point.collect.vars?.rpm.toString()!,
-                    revolution: point.collect.vars?.rev.toString()!,
-                });}
-                if (pointZ) {detail.vars.push({
-                    pointId: pointZ.pointId.toString(), fmax: point.collect?.vars?.fMax.toString()!,
-                    rpm: point.collect.vars?.rpm.toString()!,
-                    revolution: point.collect.vars?.rev.toString()!,
-                });}
-            }
+                if (pointY) {
+                    collect?.NEXT_Y_W?.forEach((value) =>
+                        detail.waveform.push({ pointId: pointY.id, pointCode: pointY.code, measure_y: value })
+                    );
+                    collect?.NEXT_Y_S?.forEach((value) =>
+                        detail.spectrum.push({ pointId: pointY.id, pointCode: pointY.code, measure_y: value })
+                    );
+                }
 
-            // 👉 waveform & spectrum por eje
-            if (pointX) {
-                collect.NEXT_X_W?.forEach((value) =>
-                    detail.waveform.push({
-                        pointId: pointX?.pointId!,
-                        pointCode: pointX?.code!,
-                        measure_y: value,
-                    })
-                );
-                collect.NEXT_X_S?.forEach((value) =>
-                    detail.spectrum.push({
-                        pointId: pointX?.pointId!,
-                        pointCode: pointX?.code!,
-                        measure_y: value,
-                    })
-                );
-            }
+                if (pointZ) {
+                    collect?.NEXT_Z_W?.forEach((value) =>
+                        detail.waveform.push({ pointId: pointZ.id, pointCode: pointZ.code, measure_y: value })
+                    );
+                    collect?.NEXT_Z_S?.forEach((value) =>
+                        detail.spectrum.push({ pointId: pointZ.id, pointCode: pointZ.code, measure_y: value })
+                    );
+                }
+            });
 
-            if (pointY) {
-                collect.NEXT_Y_W?.forEach((value) =>
-                    detail.waveform.push({
-                        pointId: pointY?.pointId!,
-                        pointCode: pointY?.code!,
-                        measure_y: value,
-                    })
-                );
-                collect.NEXT_Y_S?.forEach((value) =>
-                    detail.spectrum.push({
-                        pointId: pointY?.pointId!,
-                        pointCode: pointY?.code!,
-                        measure_y: value,
-                    })
-                );
-            }
+            return detail;
+        })
+    );
 
-            if (pointZ) {
-                collect.NEXT_Z_W?.forEach((value) =>
-                    detail.waveform.push({
-                        pointId: pointZ?.pointId!,
-                        pointCode: pointZ?.code!,
-                        measure_y: value,
-                    })
-                );
-                collect.NEXT_Z_S?.forEach((value) =>
-                    detail.spectrum.push({
-                        pointId: pointZ?.pointId!,
-                        pointCode: pointZ?.code!,
-                        measure_y: value,
-                    })
-                );
-            }
-        });
-
-        return detail;
-    });
+    return result;
 };
 
 export const  generateSurveys = (data: SurveyStore[]): Survey[] => {

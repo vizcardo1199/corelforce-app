@@ -251,6 +251,25 @@ export const findPointForCollectDataByCode = async (mawoiId: any, pointsCode: an
     return null;
 };
 
+export const findPointForCollectDataByMawoiId = async (mawoiId: any): Promise<any> => {
+    let plantsStore: any = await AsyncStorage.getItem('plants') || '[]';
+    plantsStore = JSON.parse(plantsStore);
+    for (let plant of plantsStore) {
+        for (let area of plant.areas) {
+            for (let system of area.systems) {
+                for (let mawoi of system.mawois) {
+                    if (mawoi.id == mawoiId) {
+                        return {
+                            mawoi,
+                        };
+                    }
+                }
+            }
+        }
+    }
+    return null;
+};
+
 
 export const processSpectra = (arr: any, fixedMultiplier = PARAMS_SPEC.FIXED ) => {
     // Aplicar la condición de umbral y multiplicador
