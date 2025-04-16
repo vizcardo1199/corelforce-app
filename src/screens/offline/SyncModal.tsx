@@ -32,7 +32,7 @@ const SyncModal = ({ visible, onClose, surveys, onSync }) => {
             <View style={styles.overlay}>
                 <View style={styles.modal}>
                     <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                        <Icon name="close" size={22} color={isDark ? '#fff' : '#000'} />
+                        <Icon name="x" size={22} color={isDark ? '#fff' : '#000'} />
                     </TouchableOpacity>
 
                     <Text style={styles.header}>Synchronize survey</Text>
@@ -45,7 +45,7 @@ const SyncModal = ({ visible, onClose, surveys, onSync }) => {
                     />
 
                     <TouchableOpacity style={styles.syncBtn} onPress={() => onSync(surveys)}>
-                        <Icon name="cloud-upload-outline" size={20} color="#fff" />
+                        <Icon name="upload-cloud" size={20} color="#fff" />
                         <Text style={styles.syncText}>Sync</Text>
                     </TouchableOpacity>
                 </View>
