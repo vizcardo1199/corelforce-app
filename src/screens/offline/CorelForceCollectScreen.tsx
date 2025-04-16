@@ -20,7 +20,7 @@ import {
     getAsset,
     getLastBandsInfoFromStore,
     getPlantSelectedStore,
-    getPoint,
+    getPoint, getSurveyFromDB,
     getSurveysLocalStorage,
     getSurveyVariables,
     getSystemConfig,
@@ -52,6 +52,8 @@ import {ConfigValuesModal} from '../../components/ConfigValuesModal.tsx';
 import {PopoverButton} from '../../components/common/PopoverButton.tsx';
 import {POPOVER_COLLECT_INFO} from '../../types/popover-collect-info';
 import BluetoothStateManager from 'react-native-bluetooth-state-manager';
+import {database} from "../../database";
+import {Q} from "@nozbe/watermelondb";
 
 const MOCK_GRAPHS = [+{ id: '1', image: require('../../../assets/location-pin.png') },
     { id: '2', image: require('../../../assets/location-pin.png') },
@@ -152,6 +154,7 @@ export const CorelForceCollectScreen: React.FC<{
     const [lastCollectedDate, setLastCollectedDate] = useState<string>('');
     const [modalVisible, setModalVisible] = useState(false);
     const [dataToShow, setDataToShow] = useState<number[]>([]);
+    const [modalAlertDeleteVisible, setModalAlertDeleteVisible] = useState(false);
 
 
 
@@ -167,22 +170,25 @@ export const CorelForceCollectScreen: React.FC<{
         setAssetSelected(route.params.params.assetId);
         setPointDescription(route.params.params.pointDescription);
 
-        getSurveysLocalStorage(route.params.params.assetId!, route.params.params.pointId!)
-            .then((survey) => {
+        getSurveyFromDB(route.params.params.assetId!, route.params.params.pointId!)
+            .then(async (survey) => {
                 console.log('Datos recolectados obtenidos del dispositivo');
-                if(survey) {
-                    const dates = survey.collects!.map((collect: CollectData) => collect.date!);
-                    setDatesMeasured(dates);
-                    setLastCollectedDate(dates[dates.length - 1]);
-                    setNoDataMeasured(false);
-                    if(dates.length > 0) {
+                if (survey) {
+                    const collects = await survey.collects.fetch(); // 👈 obtén los collects reales
+
+                    if (collects.length > 0) {
+                        const dates = collects.map((collect) => collect.date!);
+                        setDatesMeasured(dates);
+                        setLastCollectedDate(dates[dates.length - 1]);
+                        setNoDataMeasured(false);
                         setDateMeasuredSelected(dates[dates.length - 1]);
                     } else {
-                        // clear graphs
                         clearGraphs();
+                        setDatesMeasured([]);
+                        setNoDataMeasured(true);
                     }
+
                 } else {
-                    // clear graphs
                     clearGraphs();
                     setDatesMeasured([]);
                     setNoDataMeasured(true);
@@ -235,6 +241,14 @@ export const CorelForceCollectScreen: React.FC<{
         // iOS generalmente no requiere permisos explícitos para escanear
         return true;
     };
+
+    const showModalAlertDelete = () => {
+        setModalAlertDeleteVisible(true);
+    };
+
+    const confirmDelete = async (assetId: number, pointId: number, date: string) => {
+        console.log(assetId, pointId, date);
+    }
     const checkBluetoothState = async (): Promise<boolean> => {
         const state = await BluetoothStateManager.getState();
         console.log('Bluetooth State:', state);
@@ -505,34 +519,53 @@ export const CorelForceCollectScreen: React.FC<{
 
     const setLocalStorageLatestCollectData = async () => {
         let fecha = format(new Date(), 'yyyy-MM-dd hh:mm:ss a');
-        const surveysString = await AsyncStorage.getItem('surveys');
+        const surveys = database.get('surveys');
         const plantSelectedId = await getPlantSelectedStore();
-        const allSurveys: SurveyStore[] = JSON.parse(surveysString || '[]');
-
-        // console.log('setLocalStorageLatestCollectData')
-        // console.log(surveysString)
-        let survey = allSurveys.find((survey: SurveyStore) => survey.assetId === assetSelected && survey.pointId === pointSelected);
-
-
         const asset: Asset = (await getAsset(assetSelected!))!;
         const point: Point = (await getPoint(pointSelected!))!;
         pointWithCollectData.vars = await getSurveyVariables();
-        if (!survey) {
-            survey = {
-                assetId: assetSelected!,
-                pointId: pointSelected!,
-                plantId: plantSelectedId,
-                assetDescription: asset.description,
-                pointCode: point.code,
-                pointDescription: point.description,
-                isMonoaxial: asset.isMonoaxial == 1,
-                collects: [],
-            };
-            allSurveys.push(survey);
-        }
-        survey.collects!.push({...pointWithCollectData,uuid: generateUUID(), date: fecha, time: new Date().getTime(), synced: false});
+        const existingSurvey = await surveys
+            .query(
+                Q.where('asset_id', assetSelected),
+                Q.where('point_id', pointSelected)
+            )
+            .fetch();
 
-        await AsyncStorage.setItem('surveys', JSON.stringify(allSurveys));
+        await database.write(async () => {
+            let survey;
+            if (existingSurvey.length === 0) {
+                console.log('creating new survey');
+                survey = await surveys.create(s => {
+                    s.assetId = assetSelected;
+                    s.assetDescription = asset.description;
+                    s.isMonoaxial = asset.isMonoaxial === 1;
+                    s.pointId = pointSelected;
+                    s.pointCode = point.code;
+                    s.pointDescription = point.description;
+                    s.plantId = plantSelectedId;
+                    s.plantDescription = ''; // puedes agregarla si tienes esta info
+                });
+            } else {
+                console.log('updating existing survey');
+                survey = existingSurvey[0];
+            }
+
+            await survey.collections.get('collects').create(c => {
+                c.survey.set(survey);
+                c.uuid = generateUUID();
+                c.date = fecha;
+                c.time = new Date().getTime();
+                c.synced = false;
+                c.nextXW = JSON.stringify(pointWithCollectData.NEXT_X_W ?? []);
+                c.nextXS = JSON.stringify(pointWithCollectData.NEXT_X_S ?? []);
+                c.nextYW = JSON.stringify(pointWithCollectData.NEXT_Y_W ?? []);
+                c.nextYS = JSON.stringify(pointWithCollectData.NEXT_Y_S ?? []);
+                c.nextZW = JSON.stringify(pointWithCollectData.NEXT_Z_W ?? []);
+                c.nextZS = JSON.stringify(pointWithCollectData.NEXT_Z_S ?? []);
+                c.vars = JSON.stringify(pointWithCollectData.vars ?? {});
+            });
+        });
+
         setDatesMeasured(datesMeasured.concat(fecha));
         setLastCollectedDate(fecha);
     };
@@ -815,12 +848,27 @@ export const CorelForceCollectScreen: React.FC<{
     useEffect(() => {
 
         pointTemp = null;
-        getSurveysLocalStorage(assetSelected!, pointSelected!)
-            .then((survey) => {
-                if(survey) {
-                    const collect = survey.collects!.find((collect: CollectData) => collect.date === dateMeasuredSelected);
-                    if(collect) {
-                        pointWithCollectData = collect;
+        getSurveyFromDB(assetSelected!, pointSelected!)
+            .then(async (survey) => {
+                if (survey) {
+                    const collects = await survey.collects.fetch(); // Obtener los collects asociados
+
+                    const collect = collects.find((collect: any) => collect.date === dateMeasuredSelected);
+                    if (collect) {
+                        pointWithCollectData = {
+                            date: collect.date,
+                            time: collect.time,
+                            uuid: collect.uuid,
+                            synced: collect.synced,
+                            NEXT_X_W: JSON.parse(collect.nextXW),
+                            NEXT_X_S: JSON.parse(collect.nextXS),
+                            NEXT_Y_W: JSON.parse(collect.nextYW),
+                            NEXT_Y_S: JSON.parse(collect.nextYS),
+                            NEXT_Z_W: JSON.parse(collect.nextZW),
+                            NEXT_Z_S: JSON.parse(collect.nextZS),
+                            vars: JSON.parse(collect.vars),
+                        };
+
                         drawdata()
                             .then(() => {
                                 console.log('Datos dibujados');
@@ -916,7 +964,10 @@ export const CorelForceCollectScreen: React.FC<{
                     <PointIcon name="pin" size={24} color="#555"/>
                     {renderSelectorDates()}
                     <Icon name="camera" size={24} color="black"/>
-                    <Icon name="calendar" size={24} color="red"/>
+                    <TouchableOpacity style={styles.filterButton} onPress={() => showModalAlertDelete(true)}>
+                        <Icon name="trash" size={24} color="red"/>
+                    </TouchableOpacity>
+
                 </View>
 
 
@@ -1152,6 +1203,19 @@ export const CorelForceCollectScreen: React.FC<{
     return (
             <ScrollView>
                 <View style={[styles.container, theme.background]}>
+                <Modal animationType="fade" transparent={true} visible={modalAlertDeleteVisible}>
+                    <View style={styles.modalAlertContainer}>
+                        <View style={styles.modalAlertView}>
+                            <Text style={styles.modalAlertText}>are you sure you want to delete collected data?</Text>
+                            <TouchableOpacity style={styles.modalAlertButton} onPress={() => setModalAlertDeleteVisible(false)}>
+                                <Text style={styles.modalAlertButtonText}>Cancelar</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={styles.modalAlertButton} onPress={async () => await confirmDelete(assetSelected!, pointSelected!, dateMeasuredSelected!)}>
+                                <Text style={styles.modalAlertButtonText}>Eliminar</Text>
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </Modal>
                 <Modal
                     animationType="fade"
                     transparent={true}

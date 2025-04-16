@@ -26,6 +26,9 @@ import {Area} from '../../types/area';
 import {Plant} from '../../types/plant';
 import {Asset} from '../../types/asset';
 import {Point} from '../../types/point';
+import {Survey} from "../../types/survey.ts";
+import {database} from "../../database";
+import {Q} from "@nozbe/watermelondb";
 
 
 export const getSurveyVariables = async (): Promise<SurveyVariables> => {
@@ -286,6 +289,19 @@ export const getSurveysLocalStorage = async (assetId: number, pointId: number): 
     const surveys: SurveyStore[] = JSON.parse(surveysString || '[]');
 
     return surveys.find((survey: SurveyStore) => survey.assetId === assetId && survey.pointId === pointId) || null;
+};
+
+export const getSurveyFromDB = async (assetId: number, pointId: number): Promise<Survey | null> => {
+    const surveysCollection = database.get<Survey>('surveys');
+
+    const result = await surveysCollection
+        .query(
+            Q.where('asset_id', assetId),
+            Q.where('point_id', pointId)
+        )
+        .fetch();
+
+    return result.length > 0 ? result[0] : null;
 };
 export const findPointInCollectData = async (assetId: number, pointId: number): Promise<any | null> => {
     const pattern = 'yyyy-MM-dd hh:mm:ss a';

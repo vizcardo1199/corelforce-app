@@ -4,8 +4,13 @@ import {PLANTS_KEY} from '../config/constants';
 import {System} from '../types/system';
 import {Area} from '../types/area';
 import {Asset} from '../types/asset';
+import {database} from "../database";
 
 export const getPlantsBasic = async (): Promise<Plant[]> => {
+
+    await database.write(async () => {
+        await database.unsafeResetDatabase();
+    });
     const plantsString = await AsyncStorage.getItem(PLANTS_KEY);
     const plants = JSON.parse(plantsString || '[]');
 
