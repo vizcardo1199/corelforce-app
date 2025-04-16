@@ -1,0 +1,16 @@
+<svg id="icon" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <defs>
+    <style>
+      .cls-1 {
+      fill: #ffa500; /* Color blanco para el ícono */
+      stroke: black; /* Bordes opcionales */
+      stroke-width: 0.5; /* Ajusta el grosor del borde */
+      }
+      .transparent {
+      fill: none; /* Asegúrate de que el rectángulo sea transparente */
+      }
+    </style>
+  </defs>
+  <path d="M16,2A14,14,0,1,0,30,16,14,14,0,0,0,16,2ZM14,21.5l-5-5L10.5,15l4,4,9-9L24,11Z" class="cls-1"/>
+  <rect id="_Transparent_Rectangle_" data-name="&lt;Transparent Rectangle&gt;" class="transparent" width="32" height="32"/>
+</svg>
