@@ -889,28 +889,39 @@ export const CorelForceCollectScreen: React.FC<{
 
     }, [dateMeasuredSelected]);
     const connectDevice = async (device: Device) => {
-
-
-
         console.log(connectedDevice);
-        if(connectedDevice?.id == device.id) {
+
+        if (connectedDevice?.id == device.id) {
             await connectedDevice.cancelConnection();
             connectedDevice = null;
             BLUETOOTH_PROPS.device = null;
             return;
         }
+
         hideModalScanning();
+
+        // Paso 1: Conectar
         connectedDevice = await device.connect();
         BLUETOOTH_PROPS.device = connectedDevice;
+
+        // ✅ Paso 2: Solicitar MTU (aquí)
+        try {
+            const mtu = await connectedDevice.requestMTU(247);
+            console.log("✅ MTU solicitado:", mtu);
+        } catch (error) {
+            console.warn("⚠️ No se pudo solicitar el MTU:", error);
+        }
+
+        // Paso 3: Descubrir servicios
         await connectedDevice.discoverAllServicesAndCharacteristics();
+
         setIsSensorConnected(true);
+
         connectedDevice.onDisconnected((error) => {
             console.error('El dispositivo se ha desconectado:', error);
             setIsSensorConnected(false);
             connectedDevice = null;
         });
-
-
     };
     const connectDeviceFromGlobal = async () => {
         if(!BLUETOOTH_PROPS.device) {
