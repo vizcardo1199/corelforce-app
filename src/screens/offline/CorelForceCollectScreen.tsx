@@ -463,7 +463,7 @@ export const CorelForceCollectScreen: React.FC<{
                     // call next function
                     eventActive = eventActive.includes('_X') ? 'NEXT_Y' : 'NEXT_Z';
                     // writeOnCharacteristic("NEXT_X");
-                    writeOnSensorCharacteristic('NEXT_X')
+                    writeOnSensorCharacteristic(eventActive)
                         .then(() => {
                             console.log('NEXT_X sent');
                         });
