@@ -155,6 +155,8 @@ export const CorelForceCollectScreen: React.FC<{
     const [modalVisible, setModalVisible] = useState(false);
     const [dataToShow, setDataToShow] = useState<number[]>([]);
     const [modalAlertDeleteVisible, setModalAlertDeleteVisible] = useState(false);
+    const [modalSyncLoadingVisible, setModalSyncLoadingVisible] = useState(false);
+    const [modalAlertMessageVisible, setModalAlertMessageVisible] = useState(false);
 
 
 
@@ -387,7 +389,7 @@ export const CorelForceCollectScreen: React.FC<{
 
 
         if(pointSelected == null) {
-            showModalAlert('Seleccione un punto para recolectar datos');
+            showModalAlert('Select a point to collect data');
             return;
         }
         if (!connectedDevice) {
@@ -774,14 +776,21 @@ export const CorelForceCollectScreen: React.FC<{
 
     const showModalSync = async () => {
 
-        console.log('showModalSync');
+        setModalSyncLoadingVisible(true);
         const plantId = await getPlantSelectedStore();
 
         const surveys = await mapByAssetsGroup(plantId);
 
+
         console.log(surveys);
         setSurveysToSync(surveys);
-        setModalSyncVisible(true);
+        setModalSyncLoadingVisible(false);
+
+        if (surveys.length > 0) {
+            setModalSyncVisible(true);
+        } else {
+            showModalAlert('No data to sync');
+        }
     };
 
     const showWaveFormData = async (chartName: string, point: any): Promise<POPOVER_COLLECT_INFO> => {
@@ -799,9 +808,7 @@ export const CorelForceCollectScreen: React.FC<{
         } else if (chartName.includes('_Z')) {
             pointsCode = [pointCode + 'A', pointCode + 'Z'];
         }
-        console.log(pointInUse);
-        console.log('----------');
-        console.log(pointsCode);
+
 
         let lastBandsInfo = await getLastBandsInfoFromStore(chartName, assetSelected!, pointCode, parse(dateMeasuredSelected!, pattern, new Date()));
 
@@ -1229,6 +1236,29 @@ export const CorelForceCollectScreen: React.FC<{
                         </View>
                     </View>
                 </Modal>
+                    <Modal
+                        animationType="fade"
+                        transparent={true}
+                        visible={modalSyncLoadingVisible}
+                    >
+                        <View style={styles.loadingModalContainer}>
+                            <View style={styles.loadingModalView}>
+                                <ActivityIndicator size="large" color="#007bff"/>
+                                <Text style={styles.loadingModalText}>Processing...</Text>
+                            </View>
+                        </View>
+                    </Modal>
+                    <Modal
+                        animationType="fade"
+                        transparent={true}
+                        visible={modalAlertMessageVisible}
+                    >
+                        <View style={styles.loadingModalContainer}>
+                            <View style={styles.loadingModalView}>
+                                <Text style={styles.loadingModalText}>{modalAlertMessage}</Text>
+                            </View>
+                        </View>
+                    </Modal>
                 <Modal
                     animationType="fade"
                     transparent={true}
