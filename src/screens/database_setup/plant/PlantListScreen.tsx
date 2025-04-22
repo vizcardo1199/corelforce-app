@@ -38,6 +38,8 @@ import {
 } from '../../../api/services/plantService';
 import { AccountListModal } from '../account/AccountListModal.tsx';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import {database} from "../../../database";
+import {insertPlantWithAll} from "../../../services/storage.service.ts";
 
 export const PlantListScreen: React.FC<{
   navigation: any;
@@ -242,84 +244,88 @@ export const PlantListScreen: React.FC<{
     console.log(selectedItems);
 
     AsyncStorage.getItem('plants')
-    .then((plantsString) => {
+        .then((plantsString) => {
 
-      const plantsPromises = selectedItems.map((plantId) =>
-        getOfflineDataPlant(plantId).then((plantData) => {
-          const plants = JSON.parse(plantsString || '[]');
-          const index = searchIndexPlants(plants, plantId);
-          if(index !== -1) {
+          const plantsPromises = selectedItems.map((plantId) =>
+              getOfflineDataPlant(plantId).then((plantData) => {
+                const plants = JSON.parse(plantsString || '[]');
+                const index = searchIndexPlants(plants, plantId);
+                if (index !== -1) {
 
-            plants[index] = plantData[0];
-          } else {
-            plants.push(plantData[0]);
-          }
-         // console.log(plantData[0]);
-         // console.log(plantData[0].areas);
-          const assets = plantData[0]?.areas?.map((area: any) => area.systems).flat()?.map((system: any) => system.mawois).flat() || [];
+                  plants[index] = plantData[0];
+                } else {
+                  plants.push(plantData[0]);
+                }
+                // console.log(plantData[0]);
+                // console.log(plantData[0].areas);
+                const assets = plantData[0]?.areas?.map((area: any) => area.systems).flat()?.map((system: any) => system.mawois).flat() || [];
 
-          console.log(assets);
-          const assetsPromises = assets.map((asset: any) => {
-            const imagesPromises = asset.images.map((imageUrl: any) => {
-              const fileName = imageUrl.split('/').pop();
-              const localPath = `${RNFS.DocumentDirectoryPath}/${plantId}_${asset.id}_${fileName}`;
+                console.log(assets);
+                const assetsPromises = assets.map((asset: any) => {
+                  const imagesPromises = asset.images.map((imageUrl: any) => {
+                    const fileName = imageUrl.split('/').pop();
+                    const localPath = `${RNFS.DocumentDirectoryPath}/${plantId}_${asset.id}_${fileName}`;
 
-              console.log('Descargando:', imageUrl);
 
-              return RNFS.downloadFile({
-                fromUrl: imageUrl,
-                toFile: localPath,
-              })
-                  .promise
-                  .then((result) => {
-                    if (result.statusCode === 200) {
-                      console.log(`Imagen ${imageUrl} guardada en ${localPath}`);
-                      return {
-                        localPath,
-                        assetId: asset.id,
-                        plantId,
-                      };
-                    } else {
-                      console.warn(`Descarga fallida para ${imageUrl}: status ${result.statusCode}`);
-                      return null;
-                    }
-                  })
-                  .catch((error) => {
-                    console.error(`Error al guardar la imagen: ${imageUrl}`, error);
-                    return null;
+                    return RNFS.downloadFile({
+                      fromUrl: imageUrl,
+                      toFile: localPath,
+                    })
+                        .promise
+                        .then((result) => {
+                          if (result.statusCode === 200) {
+                            // console.log(`Imagen ${imageUrl} guardada en ${localPath}`);
+                            return {
+                              localPath,
+                              assetId: asset.id,
+                              plantId,
+                            };
+                          } else {
+                            console.warn(`Descarga fallida para ${imageUrl}: status ${result.statusCode}`);
+                            return null;
+                          }
+                        })
+                        .catch((error) => {
+                          console.error(`Error al guardar la imagen: ${imageUrl}`, error);
+                          return null;
+                        });
                   });
-            });
 
-            return Promise.all(imagesPromises);
-          });
+                  return Promise.all(imagesPromises);
+                });
 
-          return Promise.all(assetsPromises).then((assetsData) => {
-            console.log(plants);
-            AsyncStorage.setItem('plants', JSON.stringify(plants))
-            .then(() => {
+                return Promise.all(assetsPromises).then((assetsData) => {
+                  console.log(plants);
+                  insertPlantWithAll(database, plants)
+                      // AsyncStorage.setItem('plants', JSON.stringify(plants))
+                      .then(() => {
 
-              console.log('Plantas guardadas en el dispositivo');
-              return{
-                plantId,
-                assets: assetsData,
-              };
-            });
-            }); // Esperar todos los assets y organizarlos
-        })
-      );
+                        console.log('Plantas guardadas en el dispositivo');
+                        return {
+                          plantId,
+                          assets: assetsData,
+                        };
+                      }).catch(error => {
+                    console.error('Error guardando plantas:', error);
+                    return null;
+                  })
+                  ;
+                }); // Esperar todos los assets y organizarlos
+              })
+          );
 
-      Promise.all(plantsPromises)
-        .then((plantsData) => {
-          console.log('Datos de plantas guardados localmente:', plantsData);
+          Promise.all(plantsPromises)
+              .then((plantsData) => {
+                console.log('Datos de plantas guardados localmente:', plantsData);
 
-        })
-        .catch((error) => {
-          console.error('Error al procesar las plantas:', error);
-        })
-        .finally(() => {
-          setLoadingDownload(false); // Desactivar loading
+              })
+              .catch((error) => {
+                console.error('Error al procesar las plantas:', error);
+              })
+              .finally(() => {
+                setLoadingDownload(false); // Desactivar loading
+              });
         });
-    });
 
   };
 

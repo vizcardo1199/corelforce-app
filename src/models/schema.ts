@@ -34,5 +34,46 @@ export const mySchema = appSchema({
                 { name: 'vars', type: 'string' },
             ],
         }),
+        tableSchema({
+            name: 'plants',
+            columns: [
+                { name: 'code', type: 'string' },
+                { name: 'description', type: 'string' },
+            ],
+        }),
+        tableSchema({
+            name: 'areas',
+            columns: [
+                { name: 'code', type: 'string' },
+                { name: 'description', type: 'string' },
+                { name: 'plant_id', type: 'string', isIndexed: true },
+            ],
+        }),
+        tableSchema({
+            name: 'systems',
+            columns: [
+                { name: 'code', type: 'string' },
+                { name: 'description', type: 'string' },
+                { name: 'area_id', type: 'string', isIndexed: true },
+            ],
+        }),
+        tableSchema({
+            name: 'assets',
+            columns: [
+                { name: 'code', type: 'string' },
+                { name: 'description', type: 'string' },
+                { name: 'is_monoaxial', type: 'number' },
+                { name: 'status', type: 'string', isOptional: true },
+                { name: 'system_id', type: 'string', isIndexed: true },
+            ],
+        }),
+        tableSchema({
+            name: 'points',
+            columns: [
+                { name: 'code', type: 'string' },
+                { name: 'description', type: 'string' },
+                { name: 'asset_id', type: 'string', isIndexed: true },
+            ],
+        }),
     ],
 });

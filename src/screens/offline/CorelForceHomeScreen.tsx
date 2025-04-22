@@ -35,11 +35,17 @@ export const CorelForceHomeScreen: React.FC<{
     );
 
     const getPlants = () => {
+        console.log('getPlants');
+
         getPlantsBasic()
             .then(plants => {
                 console.log('Plantas obtenidas');
                 console.log(plants);
                 setPlants(plants);
+            })
+            .catch(error => {
+                console.error('Error obteniendo plantas:', error);
+                setPlants([]);
             });
     };
 

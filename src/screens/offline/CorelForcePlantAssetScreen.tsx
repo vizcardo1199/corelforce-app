@@ -39,7 +39,10 @@ export const CorelForcePlantAssetScreen: React.FC<{
             .then(assets => {
                 console.log(assets)
                 setAssets(assets)
-            });
+            }).catch(error => {
+            console.error('Error obteniendo plantas:', error);
+            setAssets([]);
+        });
     }, []);
     const AssetRow = ({ id, description, status, code }: { id: number; description: string; status: string, code: string }) => {
         const { name, color } = statusIcon['ok'];

@@ -70,14 +70,6 @@ export const  saveBandsInfoStore = async (bandsInfoStore: any) =>{
     await AsyncStorage.setItem('bandsInfoStore', JSON.stringify(bandsInfoStore));
 };
 
-export const getPlantIdFromSystemId = async (systemId: number): Promise<number> => {
-    const plantsString = await AsyncStorage.getItem(PLANTS_KEY) || '[]';
-    const plants: Plant[] = JSON.parse(plantsString || '[]');
-
-    console.log('----------------------');
-    console.log(plantsString);
-    return plants.find((plant: Plant) => plant.areas.find((area: Area) => area.systems.find((system: any) => system.id === systemId)))?.id || -1;
-};
 
 export const getAsset = async (assetId: number): Promise<Asset | undefined> => {
     const plantsString = await AsyncStorage.getItem(PLANTS_KEY) || '[]';
@@ -118,9 +110,7 @@ export const getPoint = async (pointId: number): Promise<Point | undefined> => {
     return undefined;
 };
 
-export const savePlantSelectedStore = async (plantSelectedId: number) => {
-    await AsyncStorage.setItem(PLANT_SELECTED_KEY, plantSelectedId.toString());
-};
+
 
 export const getPlantSelectedStore = async (): Promise<number> => {
     const plantSelectedId = await AsyncStorage.getItem(PLANT_SELECTED_KEY);
