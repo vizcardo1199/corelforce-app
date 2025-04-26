@@ -11,12 +11,13 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {TouchableRipple} from "react-native-paper";
 import {getAssetsByPlantId} from "../../services/storage.service";
 import {Asset} from "../../types/asset";
+import {useFocusEffect} from "@react-navigation/native";
 
 
 
 const statusIcon = {
     ok: { name: 'check-circle', color: 'green' },
-    warning: { name: 'alert-circle', color: '#f4c542' },
+    warning: { name: 'check-circle-outline', color: 'green' },
     error: { name: 'close-circle', color: 'red' },
 };
 
@@ -32,20 +33,22 @@ export const CorelForcePlantAssetScreen: React.FC<{
 
     const [assets, setAssets] = useState<Asset[]>([]);
 
-    useEffect(() => {
+    useFocusEffect(
+        React.useCallback(() => {
+            getAssetsByPlantId(route.params.params.id)
+                .then(assets => {
+                    console.log(assets)
+                    setAssets(assets)
+                }).catch(error => {
+                console.error('Error obteniendo plantas:', error);
+                setAssets([]);
+            });
+        }, [])
+    );
 
-
-        getAssetsByPlantId(route.params.params.id)
-            .then(assets => {
-                console.log(assets)
-                setAssets(assets)
-            }).catch(error => {
-            console.error('Error obteniendo plantas:', error);
-            setAssets([]);
-        });
-    }, []);
-    const AssetRow = ({ id, description, status, code }: { id: number; description: string; status: string, code: string }) => {
-        const { name, color } = statusIcon['ok'];
+    const AssetRow = ({ id, description, status, code, isMeasured }: { id: number; description: string; status: string, code: string, isMeasured: string }) => {
+        const state = isMeasured === 'all' ? 'ok' : isMeasured === 'partial' ? 'warning' : 'error';
+        const { name, color } = statusIcon[state];
 
         return (
             <View style={styles.assetRow}>
@@ -88,7 +91,8 @@ export const CorelForcePlantAssetScreen: React.FC<{
             <FlatList
                 data={assets}
                 keyExtractor={(item) => item.id}
-                renderItem={({ item }) => <AssetRow id={item.id} status={item.status} description={item.description}  code={item.code}/>}
+                renderItem={({ item }) => <AssetRow id={item.id} status={item.status} description={item.description}  code={item.code}
+                isMeasured={item.isMeasured}/>}
                 contentContainerStyle={styles.listContainer}
             />
         </View>

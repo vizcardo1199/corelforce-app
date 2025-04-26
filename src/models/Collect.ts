@@ -7,6 +7,7 @@ export default class Collect extends Model {
     static table = 'collects';
 
     @field('uuid') uuid!: string;
+    @field('synced') synced!: boolean;
     @field('date') date!: string;
     @field('time') time!: number;
     @field('synced') synced!: boolean;

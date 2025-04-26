@@ -5,6 +5,7 @@ export interface Asset {
     code: string;
     description: string;
     isMonoaxial: number;
+    isMeasured: boolean;
     status?: string;
     points: Point[];
 }

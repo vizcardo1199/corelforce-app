@@ -6,6 +6,10 @@ import {CollectData} from '../../types/collect-data';
 import {SurveySync} from '../../types/survey-sync';
 import {database} from "../../database";
 import {Q} from "@nozbe/watermelondb";
+import Collect from "../../models/Collect.ts";
+import Point from "../../models/Point.model.ts";
+import Asset from "../../models/Asset.model.ts";
+import {Survey as SurveyModel} from "../../models/Survey.ts";
 
 export const mapSurveyForSync = (mawoisStore) => {
     const syncSurvey = groupPointsByDate(mawoisStore);
@@ -165,7 +169,7 @@ export const mapByAssetsGroup = async (plantId: number): Promise<SurveySync[]> =
     const surveyStores: SurveyStore[] = [];
 
     for (const survey of surveys) {
-        const collects = await survey.collects.fetch();
+        const collects = (await survey.collects.fetch()).filter((collect) => collect.synced !== true);
 
         const surveyStore: SurveyStore = {
             assetId: survey.assetId,
@@ -209,19 +213,50 @@ export const mapByAssetsGroup = async (plantId: number): Promise<SurveySync[]> =
 };
 
 export const saveCollectDataSynced = async (uuids: string[]) => {
-    const surveysString = await AsyncStorage.getItem('surveys');
-    let allSurveys: SurveyStore[] = JSON.parse(surveysString || '[]');
+    try {
+        await database.write(async () => {
+            // 1. Buscar los collects a actualizar
+            const collectsToUpdate = await database
+                .get<Collect>('collects')
+                .query(Q.where('uuid', Q.oneOf(uuids)))
+                .fetch();
 
-    allSurveys = allSurveys.map((survey: SurveyStore) => {
-        const collects = survey.collects!.filter((collect: CollectData) => uuids.includes(collect.uuid!));
-        collects.forEach((collect: CollectData) => {
-            collect.synced = true;
+            for (const collect of collectsToUpdate) {
+                // 2. Marcar collect como synced
+                await collect.update(c => {
+                    c.synced = true;
+                });
+
+                // 3. Buscar el Survey relacionado
+                const survey = await collect.survey.fetch() as SurveyModel;
+
+                if (survey) {
+                    // 4. Buscar el Point y el Asset
+                    const point = await database.get<Point>('points').find(survey.pointId.toString()).catch(() => null);
+                    const asset = await database.get<Asset>('assets').find(survey.assetId.toString()).catch(() => null);
+
+                    // 5. Marcar point como isMeasured = false
+                    if (point) {
+                        await point.update(p => {
+                            p.isMeasured = false;
+                        });
+                    }
+
+                    // 6. Marcar asset como isMeasured = false
+                    if (asset) {
+                        await asset.update(a => {
+                            a.isMeasured = false;
+                        });
+                    }
+                }
+            }
         });
 
-        return survey;
-    });
-
-    await AsyncStorage.setItem('surveys', JSON.stringify(allSurveys));
+        console.log('✅ Collects, Points y Assets actualizados correctamente como synced = true / isMeasured = false');
+    } catch (error) {
+        console.error('❌ Error actualizando collects, points o assets:', error);
+        throw error;
+    }
 };
 
 export const generateSurveysToSync = async (data: Survey[]): Promise<SurveySync[]> => {

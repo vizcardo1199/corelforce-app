@@ -24,7 +24,7 @@ import {
     getSurveysLocalStorage,
     getSurveyVariables,
     getSystemConfig,
-    processSpectra,
+    processSpectra, updatePointMeasurementStatus,
 } from '../../api/services/utilService';
 import {CollectData} from '../../types/collect-data';
 import {Picker} from '@react-native-picker/picker';
@@ -570,6 +570,7 @@ export const CorelForceCollectScreen: React.FC<{
 
         setDatesMeasured(datesMeasured.concat(fecha));
         setLastCollectedDate(fecha);
+        await updatePointMeasurementStatus(pointSelected!, true);
     };
 
     const getDataToDraw = async (eventActive: string) => {
@@ -829,20 +830,37 @@ export const CorelForceCollectScreen: React.FC<{
 
         console.log('_crestFactor, _pkTopk, pkTopk', _crestFactor, _pkTopk, pkTopk);
         console.log('last: ',lastBandsInfo);
-        return {crestFactor: _crestFactor, peakToPeak: pkTopk, lastCrest: lastBandsInfo.crestFactor, lastPkPk: lastBandsInfo.peakToPeak || lastBandsInfo.pkTopk};
+        return {crestFactor: _crestFactor, peakToPeak: pkTopk, lastCrest: lastBandsInfo?.crestFactor, lastPkPk: lastBandsInfo?.peakToPeak || lastBandsInfo?.pkTopk};
 
     };
     const handleSync = async (surveysSync: SurveySync[]) => {
-        if(surveysSync.length > 0) {
+        if (surveysSync.length > 0) {
             setLoadingSyncVisible(true);
-            for (const survey of surveysSync){
-                await sendSurvey(survey);
-                await saveCollectDataSynced(survey.uuids);
+
+            try {
+                // 1. Ejecutamos todos los sendSurvey en paralelo
+                const sendSurveyPromises = surveysSync.map((survey) => sendSurvey(survey));
+
+                const results = await Promise.allSettled(sendSurveyPromises);
+
+                // 2. Filtramos solo los surveys que se enviaron exitosamente
+                const successfulSurveys = surveysSync.filter((_, index) => results[index].status === 'fulfilled');
+
+                // 3. De esos surveys exitosos, juntamos todos los uuids
+                const allUuids = successfulSurveys.flatMap((survey) => survey.uuids);
+
+                // 4. Ahora sí, actualizamos los collects como synced
+                if (allUuids.length > 0) {
+                    await saveCollectDataSynced(allUuids);
+                }
+
+                console.log(`✅ Sincronizados correctamente ${successfulSurveys.length}/${surveysSync.length} surveys`);
+            } catch (error) {
+                console.error('❌ Error inesperado durante la sincronización:', error);
+            } finally {
+                setLoadingSyncVisible(false);
             }
-
         }
-        setLoadingSyncVisible(false);
-
     };
     const drawdata = async () => {
 
@@ -984,7 +1002,7 @@ export const CorelForceCollectScreen: React.FC<{
                     <PointIcon name="pin" size={24} color="#555"/>
                     {renderSelectorDates()}
                     <Icon name="camera" size={24} color="black"/>
-                    <TouchableOpacity style={styles.filterButton} onPress={() => showModalAlertDelete(true)}>
+                    <TouchableOpacity  onPress={() => showModalAlertDelete(true)}>
                         <Icon name="calendar" size={24} color="red"/>
                     </TouchableOpacity>
 

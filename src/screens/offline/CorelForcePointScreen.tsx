@@ -11,6 +11,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {TouchableRipple} from "react-native-paper";
 import {getPointsByAssetId} from "../../services/storage.service";
 import {PointSelect} from "../../types/pointSelect";
+import {useFocusEffect} from "@react-navigation/native";
 
 const statusIcon = {
     ok: { name: 'check-circle', color: 'green' },
@@ -33,25 +34,7 @@ export const CorelForcePointScreen: React.FC<{
     const [assetCode, setAssetCode] = useState<string>('');
     useEffect(() => {
 
-        console.log('consultando points');
-        console.log(route.params.params);
-        setAssetDescription(route.params.params.description);
-        setAssetId(route.params.params.id);
-        setAssetCode(route.params.params.code);
-        getPointsByAssetId(route.params.params.id)
-            .then(asset => {
-                const points: PointSelect[] = Array.from(
-                    asset.points.reduce((acc, point) => {
-                        const codePoint = point.code.slice(0, 2); // Directamente usar slice para strings
-                        if (!acc.has(codePoint)) {
-                            acc.set(codePoint, { id: point.id, code: codePoint, description: point.description });
-                        }
-                        return acc;
-                    }, new Map()).values()
-                );
-                console.log(points)
-                setPoints(points);
-            });
+
     }, []);
     const pointHandler = (pointId: number, code: string, description: string) => {
         navigation.navigate('CorelForceCollectScreen', {
@@ -66,8 +49,34 @@ export const CorelForcePointScreen: React.FC<{
         })
     }
 
-    const ComponentRow = ({ id, code, description }: { id: string; code: string, description: string }) => {
-        const { name, color } = statusIcon['ok'];
+    useFocusEffect(
+        React.useCallback(() => {
+
+            console.log('consultando points');
+            console.log(route.params.params);
+            setAssetDescription(route.params.params.description);
+            setAssetId(route.params.params.id);
+            setAssetCode(route.params.params.code);
+            getPointsByAssetId(route.params.params.id)
+                .then(asset => {
+                    const points: PointSelect[] = Array.from(
+                        asset.points.reduce((acc, point) => {
+                            const codePoint = point.code.slice(0, 2); // Directamente usar slice para strings
+                            if (!acc.has(codePoint)) {
+                                acc.set(codePoint, { id: point.id, code: codePoint, description: point.description, isMeasured: point.isMeasured });
+                            }
+                            return acc;
+                        }, new Map()).values()
+                    );
+                    console.log(points)
+                    setPoints(points);
+                });
+        }, [])
+    );
+
+
+    const ComponentRow = ({ id, code, description, isMeasured }: { id: string; code: string, description: string, isMeasured: boolean }) => {
+        const { name, color } = statusIcon[isMeasured ? 'ok' : 'error'];
 
         return (
             <View style={styles.componentRow} onPress={pointHandler}>
@@ -98,7 +107,7 @@ export const CorelForcePointScreen: React.FC<{
                 data={points}
                 keyExtractor={(item) => item.id}
                 renderItem={({ item }) => (
-                    <ComponentRow id={item.id} code={item.code} description={item.description} />
+                    <ComponentRow id={item.id} code={item.code} description={item.description} isMeasured={item.isMeasured} />
                 )}
                 contentContainerStyle={styles.listContainer}
             />

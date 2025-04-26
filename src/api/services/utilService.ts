@@ -22,13 +22,15 @@ import {
 import {SurveyStore} from '../../types/survey-store';
 import {CollectData} from '../../types/collect-data';
 import {parse} from 'date-fns';
-import {Area} from '../../types/area';
-import {Plant} from '../../types/plant';
 import {Asset} from '../../types/asset';
 import {Point} from '../../types/point';
 import {Survey} from "../../types/survey.ts";
+import {Point as PointModel} from "../../models/Point.model";
+import {Asset as AssetModel} from "../../models/Asset.model";
 import {database} from "../../database";
 import {Q} from "@nozbe/watermelondb";
+import {getPointsByAssetId} from "../../services/storage.service.ts";
+import {PointSelect} from "../../types/pointSelect.ts";
 
 
 export const getSurveyVariables = async (): Promise<SurveyVariables> => {
@@ -39,6 +41,59 @@ export const getSurveyVariables = async (): Promise<SurveyVariables> => {
 
     return SURVEY_VARIABLES_DEFAULT;
 
+};
+
+export const updatePointMeasurementStatus = async (pointId: number, isMeasured: boolean): Promise<void> => {
+    try {
+        const point = await database.get<PointModel>('points').find(pointId.toString());
+
+        await database.write(async () => {
+            await point.update((p) => {
+                p.isMeasured = isMeasured;
+            });
+            // 2. Obtiene el asset del punto
+            const asset = await point.asset.fetch() as AssetModel;
+
+            const assetX: Asset = await getPointsByAssetId(asset.id);
+            const points: PointSelect[] = Array.from(
+                assetX.points.reduce((acc, pointX) => {
+                    const codePoint = pointX.code.slice(0, 2); // Directamente usar slice para strings
+                    if (!acc.has(codePoint)) {
+                        acc.set(codePoint, { id: pointX.id, code: codePoint, description: pointX.description, isMeasured: pointX.isMeasured });
+                    }
+                    return acc;
+                }, new Map()).values()
+            );
+
+
+            // 4. Verifica si todos tienen isMeasured = true
+            const allMeasured = points.every((p) => p.isMeasured === true);
+            const noneMeasured = points.every((p) => p.isMeasured === false);
+
+            let newIsMeasuredState: 'all' | 'none' | 'partial';
+
+            if (allMeasured) {
+                newIsMeasuredState = 'all';
+            } else if (noneMeasured) {
+                newIsMeasuredState = 'none';
+            } else {
+                newIsMeasuredState = 'partial';
+            }
+
+            if (newIsMeasuredState == 'all' || newIsMeasuredState == 'partial') {
+                // 5. Actualiza el asset solo si todos los puntos están medidos
+                await asset.update((a) => {
+                    a.isMeasured = newIsMeasuredState;
+                });
+                console.log(`✅ Asset ${asset.id} marcado como isMeasured = ${newIsMeasuredState}`);
+            }
+        });
+
+        console.log(`✅ Punto ${pointId} actualizado con isMeasured = ${isMeasured}`);
+    } catch (error) {
+        console.error(`❌ Error actualizando el punto ${pointId}:`, error);
+        throw error;
+    }
 };
 
 export const saveSurveyVariables = async (surveyVariables: SurveyVariables) => {
@@ -72,42 +127,35 @@ export const  saveBandsInfoStore = async (bandsInfoStore: any) =>{
 
 
 export const getAsset = async (assetId: number): Promise<Asset | undefined> => {
-    const plantsString = await AsyncStorage.getItem(PLANTS_KEY) || '[]';
-    const plants: Plant[] = JSON.parse(plantsString);
-
-    for (const plant of plants) {
-        for (const area of plant.areas) {
-            for (const system of area.systems) {
-                const found = system.mawois.find((asset) => asset.id === assetId);
-                if (found) {
-                    return found;
-                }
-            }
-        }
+    try {
+        const assetRecord = await database.get<AssetModel>('assets').find(assetId.toString());
+        return {
+            id: parseInt(assetRecord.id),
+            code: assetRecord.code,
+            description: assetRecord.description,
+            isMonoaxial: assetRecord.isMonoaxial,
+            status: assetRecord.status,
+            points: [], // opcional: puedes incluirlos si los necesitas
+        };
+    } catch (error) {
+        console.error(`❌ Asset con ID ${assetId} no encontrado:`, error);
+        return undefined;
     }
-
-    return undefined; // si no se encuentra
 };
 
 export const getPoint = async (pointId: number): Promise<Point | undefined> => {
-    const plantsString = await AsyncStorage.getItem(PLANTS_KEY) || '[]';
-    const plants: Plant[] = JSON.parse(plantsString);
+    try {
+        const pointRecord = await database.get<PointModel>('points').find(pointId.toString());
 
-    for (const plant of plants) {
-        for (const area of plant.areas) {
-            for (const system of area.systems) {
-                for (const asset of system.mawois) {
-                    const found = asset.points.find((point) => point.id === pointId);
-                    if (found) {
-                        return found;
-                    }
-                }
-            }
-        }
+        return {
+            id: parseInt(pointRecord.id),
+            code: pointRecord.code,
+            description: pointRecord.description,
+        };
+    } catch (error) {
+        console.error(`❌ Point con ID ${pointId} no encontrado:`, error);
+        return undefined;
     }
-
-    // Si no se encuentra, devuelve undefined
-    return undefined;
 };
 
 
@@ -241,23 +289,36 @@ export const findPointForCollectDataByCode = async (mawoiId: any, pointsCode: an
     return null;
 };
 
-export const findPointForCollectDataByMawoiId = async (mawoiId: any): Promise<any> => {
-    let plantsStore: any = await AsyncStorage.getItem('plants') || '[]';
-    plantsStore = JSON.parse(plantsStore);
-    for (let plant of plantsStore) {
-        for (let area of plant.areas) {
-            for (let system of area.systems) {
-                for (let mawoi of system.mawois) {
-                    if (mawoi.id == mawoiId) {
-                        return {
-                            mawoi,
-                        };
-                    }
-                }
-            }
-        }
+/**
+ * Encuentra un mawoi (asset) por su ID, incluyendo sus points asociados.
+ * @param mawoiId ID del asset
+ */
+export const findPointForCollectDataByMawoiId = async (mawoiId: number): Promise<any> => {
+    try {
+        const mawoi = await database.get<AssetModel>('assets').find(mawoiId.toString());
+
+        const points = await mawoi.points.fetch();
+
+        return {
+            mawoi: {
+                id: parseInt(mawoi.id),
+                code: mawoi.code,
+                description: mawoi.description,
+                isMonoaxial: mawoi.isMonoaxial,
+                status: mawoi.status,
+                isMeasured: mawoi.isMeasured,
+                points: points.map((p: PointModel) => ({
+                    id: parseInt(p.id),
+                    code: p.code,
+                    description: p.description,
+                    isMeasured: p.isMeasured,
+                })),
+            },
+        };
+    } catch (error) {
+        console.error(`❌ Error encontrando mawoi ${mawoiId}:`, error);
+        return null;
     }
-    return null;
 };
 
 
@@ -308,29 +369,32 @@ export const findPointInCollectData = async (assetId: number, pointId: number): 
 
 };
 
-export const findPointForCollectData = async (id: any): Promise<any> => {
-    const plants = JSON.parse(await AsyncStorage.getItem('plants') || '[]');
+export const findPointForCollectData = async (id: number): Promise<any> => {
+    try {
+        console.log('pointId', id);
 
-    console.log('pointId',id);
-    for (let plant of plants) {
-        for (let area of plant.areas) {
-            for (let system of area.systems) {
-                for (let mawoi of system.mawois) {
+        const pointRecord = await database.get<PointModel>('points').find(id.toString());
+        const mawoi = await pointRecord.asset.fetch() as AssetModel;
 
-                    for (let point of mawoi.points) {
-                        // console.log(point);
-                        if (point.id == id) {
-                            return {
-                                mawoi,
-                                point,
-                            };
-                        }
-                    }
-                }
-            }
-        }
+        return {
+            mawoi: {
+                id: parseInt(mawoi.id),
+                code: mawoi.code,
+                description: mawoi.description,
+                isMonoaxial: mawoi.isMonoaxial,
+                status: mawoi.status,
+            },
+            point: {
+                id: parseInt(pointRecord.id),
+                code: pointRecord.code,
+                description: pointRecord.description,
+                isMeasured: pointRecord.isMeasured,
+            },
+        };
+    } catch (error) {
+        console.error(`❌ Error encontrando el point ${id}:`, error);
+        return null;
     }
-    return null;
 };
 
 export const diffInMinutes = (date1: any, date2: any) => {

@@ -22,6 +22,7 @@ export const mySchema = appSchema({
             columns: [
                 { name: 'survey_id', type: 'string', isIndexed: true },
                 { name: 'uuid', type: 'string' },
+                { name: 'synced', type: 'boolean' },
                 { name: 'date', type: 'string' },
                 { name: 'time', type: 'number' },
                 { name: 'synced', type: 'boolean' },
@@ -63,6 +64,7 @@ export const mySchema = appSchema({
                 { name: 'code', type: 'string' },
                 { name: 'description', type: 'string' },
                 { name: 'is_monoaxial', type: 'number' },
+                { name: 'is_measured', type: 'string' },
                 { name: 'status', type: 'string', isOptional: true },
                 { name: 'system_id', type: 'string', isIndexed: true },
             ],
@@ -72,6 +74,7 @@ export const mySchema = appSchema({
             columns: [
                 { name: 'code', type: 'string' },
                 { name: 'description', type: 'string' },
+                { name: 'is_measured', type: 'boolean' },
                 { name: 'asset_id', type: 'string', isIndexed: true },
             ],
         }),

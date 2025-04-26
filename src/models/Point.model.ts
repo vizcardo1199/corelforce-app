@@ -6,6 +6,7 @@ export default class Point extends Model {
 
     @field('code') code!: string;
     @field('description') description!: string;
+    @field('is_measured') isMeasured!: boolean;
 
     @relation('assets', 'asset_id') asset!: any;
 }

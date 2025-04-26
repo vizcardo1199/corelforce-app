@@ -67,6 +67,7 @@ export const getPlantsBasicOld = async (): Promise<Plant[]> => {
 };
 
 export const getPlantsBasic = async (): Promise<Plant[]> => {
+    // await database.adapter.unsafeResetDatabase();
     const collection = database.get<PlantModel>('plants');
 
     const records = await collection.query().fetch();
@@ -82,6 +83,7 @@ export const getPlantsBasic = async (): Promise<Plant[]> => {
 };
 
 export const getAssetsByPlantId = async (plantId: number): Promise<Asset[]> => {
+
     const plant = await database.get<PlantModel>('plants').find(plantId.toString());
 
     const areas = await plant.areas.fetch();
@@ -94,11 +96,13 @@ export const getAssetsByPlantId = async (plantId: number): Promise<Asset[]> => {
         await Promise.all(systems.map(async (system) => await system.mawois.fetch()))
     ).flat();
 
+    console.log(assets);
     return assets.map((a) => ({
         id: parseInt(a.id), // recuerda que el ID en Watermelon es string
         code: a.code,
         description: a.description,
         isMonoaxial: a.isMonoaxial,
+        isMeasured: a.isMeasured,
         status: a.status,
         points: [], // opcional, puedes cargarlos si los necesitas
     }));
@@ -118,6 +122,7 @@ export const getPointsByAssetId = async (assetId: number): Promise<Asset | null>
                 id: parseInt(point.id),
                 code: point.code,
                 description: point.description,
+                isMeasured: point.isMeasured,
             })),
         };
     } catch (error) {
