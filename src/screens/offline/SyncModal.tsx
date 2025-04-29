@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import {
     Modal,
     View,
@@ -12,14 +12,43 @@ import Icon from 'react-native-vector-icons/Feather';
 const SyncModal = ({ visible, onClose, surveys, onSync }) => {
     const colorScheme = useColorScheme();
     const isDark = colorScheme === 'dark';
-
     const styles = getStyles(isDark);
+
+    const listRef = useRef<FlatList>(null);
+    const [syncCompleted, setSyncCompleted] = useState(false);
+    const [syncSummary, setSyncSummary] = useState({ success: 0, failed: 0 });
+
+    const handleSync = async (surveys) => {
+        const { successCount, failedCount } = await onSync(surveys);
+
+        console.log('Success count', successCount);
+        // Guardar resultados
+        setSyncSummary({ success: successCount, failed: failedCount });
+        setSyncCompleted(true);
+
+        // Scroll automático hacia arriba
+        setTimeout(() => {
+            listRef.current?.scrollToOffset({ offset: 0, animated: true });
+        }, 500); // pequeño delay para asegurar que la lista ya haya renderizado
+    };
+    useEffect(() => {
+        if (visible) {
+            // Reset states when the modal is opened
+            setSyncCompleted(false);
+            setSyncSummary({ success: 0, failed: 0 });
+        }
+    }, [visible]);
 
     const renderItem = ({ item }) => (
         <View style={styles.card}>
-            <Text style={styles.title}>
-                {item.assetDescription} - ID: {item.mawoiId}
-            </Text>
+            <View style={styles.rowBetween}>
+                <Text style={styles.title}>
+                    {item.assetDescription} - ID: {item.mawoiId}
+                </Text>
+                {item.synced === true && <Icon name="check-circle" size={20} color="green" />}
+                {item.synced === false && <Icon name="x-circle" size={20} color="red" />}
+            </View>
+
             <Text style={styles.date}>
                 Date: {new Date(item.date).toLocaleString()}
             </Text>
@@ -37,22 +66,33 @@ const SyncModal = ({ visible, onClose, surveys, onSync }) => {
 
                     <Text style={styles.header}>Synchronize survey</Text>
 
+                    {syncCompleted && (
+                        <Text style={styles.summaryText}>
+                            ✅ {syncSummary.success} successful | ❌ {syncSummary.failed} failed
+                        </Text>
+                    )}
+
                     <FlatList
+                        ref={listRef}
                         data={surveys}
                         keyExtractor={(item, index) => index.toString()}
                         renderItem={renderItem}
                         style={{ maxHeight: 300 }}
                     />
 
-                    <TouchableOpacity style={styles.syncBtn} onPress={() => onSync(surveys)}>
-                        <Icon name="upload-cloud" size={20} color="#fff" />
-                        <Text style={styles.syncText}>Sync</Text>
-                    </TouchableOpacity>
+                    {!syncCompleted && (
+                        <TouchableOpacity style={styles.syncBtn} onPress={() => handleSync(surveys)}>
+                            <Icon name="upload-cloud" size={20} color="#fff" />
+                            <Text style={styles.syncText}>Sync</Text>
+                        </TouchableOpacity>
+                    )}
                 </View>
             </View>
         </Modal>
     );
 };
+
+export default SyncModal;
 
 const getStyles = (dark: boolean) => ({
     overlay: {
@@ -60,6 +100,18 @@ const getStyles = (dark: boolean) => ({
         backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'center',
         alignItems: 'center',
+    },
+    rowBetween: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    summaryText: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        textAlign: 'center',
+        marginVertical: 10,
+        color: '#666',
     },
     modal: {
         width: '85%',
@@ -120,4 +172,3 @@ const getStyles = (dark: boolean) => ({
     },
 });
 
-export default SyncModal;

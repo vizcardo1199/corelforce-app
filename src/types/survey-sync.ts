@@ -1,5 +1,6 @@
 export type SurveySync = {
     surveyId?: number;
+    synced?: boolean | null;
     date: number;
     mawoiId: number;
     assetDescription: string;

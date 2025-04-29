@@ -28,3 +28,23 @@ export const sendSurvey = async (surveysSync: SurveySync) => {
     }
 };
 
+// export const sendSurvey = async (surveysSync: SurveySync) => {
+//     try {
+//         const randomDelay = Math.floor(Math.random() * (30000 - 15000 + 1)) + 15000; // 30-90 segundos
+//
+//         await new Promise((resolve) => setTimeout(resolve, randomDelay));
+//
+//         // Simulamos fallo en un 20% de los casos
+//         const shouldFail = Math.random() < 0.2;
+//
+//         if (shouldFail) {
+//             throw new Error('Simulated network error');
+//         }
+//
+//         return {}; // Si no falla, devuelve objeto vacío
+//     } catch (error) {
+//         console.error(error);
+//         throw new Error('Error survey sync.');
+//     }
+// };
+

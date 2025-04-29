@@ -212,52 +212,78 @@ export const mapByAssetsGroup = async (plantId: number): Promise<SurveySync[]> =
     return await generateSurveysToSync(grouped);
 };
 
-export const saveCollectDataSynced = async (uuids: string[]) => {
+export const saveCollectDataSynced = async (successfulSurveys: SurveySync[], failedSurveys: SurveySync[]) => {
     try {
         await database.write(async () => {
-            // 1. Buscar los collects a actualizar
+            const successfulUuids = successfulSurveys.flatMap(s => s.uuids);
+
+            // 1. Update successful collects
             const collectsToUpdate = await database
                 .get<Collect>('collects')
-                .query(Q.where('uuid', Q.oneOf(uuids)))
+                .query(Q.where('uuid', Q.oneOf(successfulUuids)))
                 .fetch();
 
             for (const collect of collectsToUpdate) {
-                // 2. Marcar collect como synced
                 await collect.update(c => {
                     c.synced = true;
                 });
+            }
 
-                // 3. Buscar el Survey relacionado
-                const survey = await collect.survey.fetch() as SurveyModel;
+            // 2. Update points safely
+            const successfulPointIds = new Set(successfulSurveys.map(s => s.vars.map(s => s.pointId).flat()));
+            const failedPointIds = new Set(failedSurveys.map(s => s.vars.map(s => s.pointId).flat()));
 
-                if (survey) {
-                    // 4. Buscar el Point y el Asset
-                    const point = await database.get<Point>('points').find(survey.pointId.toString()).catch(() => null);
-                    const asset = await database.get<Asset>('assets').find(survey.assetId.toString()).catch(() => null);
-
-                    // 5. Marcar point como isMeasured = false
+            for (const pointId of successfulPointIds) {
+                if (!failedPointIds.has(pointId)) {
+                    const point = await database.get<Point>('points').find(pointId.toString()).catch(() => null);
                     if (point) {
                         await point.update(p => {
                             p.isMeasured = false;
                         });
                     }
-
-                    // 6. Marcar asset como isMeasured = false
-                    if (asset) {
-                        await asset.update(a => {
-                            a.isMeasured = false;
-                        });
-                    }
                 }
+            }
+
+            // 3. Update assets based on their points status
+            const assetIds = new Set(successfulSurveys.map(s => s.mawoiId)); // All assets touched
+
+            for (const assetId of assetIds) {
+                const asset = await database.get<Asset>('assets').find(assetId.toString()).catch(() => null);
+                if (!asset) continue;
+
+                // Get all points related to this asset
+                const relatedPoints = await database
+                    .get<Point>('points')
+                    .query(Q.where('asset_id', assetId.toString()))
+                    .fetch();
+
+                if (relatedPoints.length === 0) continue;
+
+                const measuredPoints = relatedPoints.filter(p => p.isMeasured).length;
+
+                let newStatus: 'all' | 'partial' | 'none' = 'none';
+
+                if (measuredPoints === relatedPoints.length) {
+                    newStatus = 'all';
+                } else if (measuredPoints > 0) {
+                    newStatus = 'partial';
+                } else {
+                    newStatus = 'none';
+                }
+
+                await asset.update(a => {
+                    a.isMeasured = newStatus;
+                });
             }
         });
 
-        console.log('✅ Collects, Points y Assets actualizados correctamente como synced = true / isMeasured = false');
+        console.log('✅ Collects, Points, and Assets updated correctly with new asset isMeasured logic');
     } catch (error) {
-        console.error('❌ Error actualizando collects, points o assets:', error);
+        console.error('❌ Error updating collects, points, or assets:', error);
         throw error;
     }
 };
+
 
 export const generateSurveysToSync = async (data: Survey[]): Promise<SurveySync[]> => {
     console.log('generateSurveysToSync')

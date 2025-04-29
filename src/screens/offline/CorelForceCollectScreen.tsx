@@ -54,6 +54,7 @@ import {POPOVER_COLLECT_INFO} from '../../types/popover-collect-info';
 import BluetoothStateManager from 'react-native-bluetooth-state-manager';
 import {database} from "../../database";
 import {Q} from "@nozbe/watermelondb";
+import {LoadingModalProgress} from "../../components/common/LoadingModalProgress.tsx";
 
 const MOCK_GRAPHS = [+{ id: '1', image: require('../../../assets/location-pin.png') },
     { id: '2', image: require('../../../assets/location-pin.png') },
@@ -157,7 +158,7 @@ export const CorelForceCollectScreen: React.FC<{
     const [modalAlertDeleteVisible, setModalAlertDeleteVisible] = useState(false);
     const [modalSyncLoadingVisible, setModalSyncLoadingVisible] = useState(false);
     const [modalAlertMessageVisible, setModalAlertMessageVisible] = useState(false);
-
+    const [syncProgress, setSyncProgress] = useState({ completed: 0, total: 0, failed: 0 });
 
 
     useEffect(() => {
@@ -834,34 +835,64 @@ export const CorelForceCollectScreen: React.FC<{
 
     };
     const handleSync = async (surveysSync: SurveySync[]) => {
+        const counter = { successCount: 0, failedCount: 0 } ;
         if (surveysSync.length > 0) {
+            surveysSync.forEach(survey => survey.synced = null);
+
             setLoadingSyncVisible(true);
+            setSyncProgress({ completed: 0, total: surveysSync.length, failed: 0 });
 
             try {
-                // 1. Ejecutamos todos los sendSurvey en paralelo
-                const sendSurveyPromises = surveysSync.map((survey) => sendSurvey(survey));
+                const successfulUuids: string[] = [];
+                const batchSize = 10; // Batch size
 
-                const results = await Promise.allSettled(sendSurveyPromises);
+                for (let i = 0; i < surveysSync.length; i += batchSize) {
+                    const batch = surveysSync.slice(i, i + batchSize); // Take a group of 10
 
-                // 2. Filtramos solo los surveys que se enviaron exitosamente
-                const successfulSurveys = surveysSync.filter((_, index) => results[index].status === 'fulfilled');
+                    const sendSurveyPromises = batch.map((survey) =>
+                        sendSurvey(survey)
+                            .then(() => {
+                                successfulUuids.push(...survey.uuids);
+                                survey.synced = true; // ✅ Mark as synced successfully
+                                counter.successCount++;
+                            })
+                            .catch((error) => {
+                                console.error(`❌ Failed to send survey ${survey.mawoiId}:`, error);
+                                survey.synced = false; // ❌ Mark as failed
+                                setSyncProgress((prev) => ({
+                                    ...prev,
+                                    failed: prev.failed + 1,
+                                }));
+                                counter.failedCount++;
+                            })
+                            .finally(() => {
+                                setSyncProgress((prev) => ({
+                                    ...prev,
+                                    completed: prev.completed + 1,
+                                }));
+                            })
+                    );
 
-                // 3. De esos surveys exitosos, juntamos todos los uuids
-                const allUuids = successfulSurveys.flatMap((survey) => survey.uuids);
-
-                // 4. Ahora sí, actualizamos los collects como synced
-                if (allUuids.length > 0) {
-                    await saveCollectDataSynced(allUuids);
+                    await Promise.allSettled(sendSurveyPromises);
                 }
 
-                console.log(`✅ Sincronizados correctamente ${successfulSurveys.length}/${surveysSync.length} surveys`);
+                if (successfulUuids.length > 0) {
+                    await saveCollectDataSynced(surveysSync.filter(s => s.synced === true), surveysSync.filter(s => s.synced === false));
+                }
+
+                console.log(`✅ Surveys sent successfully: ${successfulUuids.length}`);
             } catch (error) {
-                console.error('❌ Error inesperado durante la sincronización:', error);
+                console.error('❌ Unexpected error during synchronization:', error);
             } finally {
                 setLoadingSyncVisible(false);
             }
         }
+        console.log('✅ Surveys sent failed:', counter.failedCount);
+        console.log('✅ Surveys sent successfully:', counter.successCount);
+        return { successCount: counter.successCount, failedCount: counter.failedCount };
     };
+
+
     const drawdata = async () => {
 
         await getDataToDraw('NEXT_X_W');
@@ -1289,6 +1320,10 @@ export const CorelForceCollectScreen: React.FC<{
                         </View>
                     </View>
                 </Modal>
+                    <LoadingModalProgress
+                        visible={loadingSyncVisible}
+                        progressText={`Syncing ${syncProgress.completed} of ${syncProgress.total} surveys...`}
+                    />
                     <Modal visible={modalVisible} transparent animationType="slide">
                         <View style={styles.modalOverlay}>
                             <View style={styles.modalContent}>
@@ -1309,7 +1344,6 @@ export const CorelForceCollectScreen: React.FC<{
                             </View>
                         </View>
                     </Modal>
-                <LoadingModal visible={loadingSyncVisible} />
                 <SyncModal
                     visible={modalSyncVisible}
                     onClose={() => setModalSyncVisible(false)}
