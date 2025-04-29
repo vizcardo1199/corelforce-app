@@ -10,6 +10,7 @@ import Collect from "../../models/Collect.ts";
 import Point from "../../models/Point.model.ts";
 import Asset from "../../models/Asset.model.ts";
 import {Survey as SurveyModel} from "../../models/Survey.ts";
+import {PointSelect} from "../../types/pointSelect.ts";
 
 export const mapSurveyForSync = (mawoisStore) => {
     const syncSurvey = groupPointsByDate(mawoisStore);
@@ -216,6 +217,7 @@ export const saveCollectDataSynced = async (successfulSurveys: SurveySync[], fai
     try {
         await database.write(async () => {
             const successfulUuids = successfulSurveys.flatMap(s => s.uuids);
+            const failUuids = failedSurveys.flatMap(s => s.uuids);
 
             // 1. Update successful collects
             const collectsToUpdate = await database
@@ -223,19 +225,39 @@ export const saveCollectDataSynced = async (successfulSurveys: SurveySync[], fai
                 .query(Q.where('uuid', Q.oneOf(successfulUuids)))
                 .fetch();
 
+            const collectsFail = await database
+                .get<Collect>('collects')
+                .query(Q.where('uuid', Q.oneOf(failUuids)))
+                .fetch();
+
+            const surveys: SurveyModel[] = [];
             for (const collect of collectsToUpdate) {
                 await collect.update(c => {
                     c.synced = true;
                 });
+
+                const survey = await collect.survey.fetch() as SurveyModel;
+                surveys.push(survey);
             }
 
-            // 2. Update points safely
-            const successfulPointIds = new Set(successfulSurveys.map(s => s.vars.map(s => s.pointId).flat()));
-            const failedPointIds = new Set(failedSurveys.map(s => s.vars.map(s => s.pointId).flat()));
+            const surveysFail: SurveyModel[] = [];
+            for (const collect of collectsFail) {
+                const survey = await collect.survey.fetch() as SurveyModel;
+                surveysFail.push(survey);
+            }
 
+            const pointsSuccessful: string[] = surveys.map(survey => survey.pointId.toString());
+            const pointsFail: string[] = surveysFail.map(survey => survey.pointId.toString());
+
+            // 2. Update points safely
+            const successfulPointIds = new Set(pointsSuccessful);
+            const failedPointIds = new Set(pointsFail);
+
+            console.log('successfulPointIds', successfulPointIds);
             for (const pointId of successfulPointIds) {
                 if (!failedPointIds.has(pointId)) {
                     const point = await database.get<Point>('points').find(pointId.toString()).catch(() => null);
+                    console.log('point', point);
                     if (point) {
                         await point.update(p => {
                             p.isMeasured = false;
@@ -244,6 +266,8 @@ export const saveCollectDataSynced = async (successfulSurveys: SurveySync[], fai
                 }
             }
 
+        });
+        await database.write(async () => {
             // 3. Update assets based on their points status
             const assetIds = new Set(successfulSurveys.map(s => s.mawoiId)); // All assets touched
 
@@ -259,10 +283,22 @@ export const saveCollectDataSynced = async (successfulSurveys: SurveySync[], fai
 
                 if (relatedPoints.length === 0) continue;
 
-                const measuredPoints = relatedPoints.filter(p => p.isMeasured).length;
+                const points: PointSelect[] = Array.from(
+                    relatedPoints.reduce((acc, point) => {
+                        const codePoint = point.code.slice(0, 2); // Directamente usar slice para strings
+                        if (!acc.has(codePoint)) {
+                            acc.set(codePoint, { id: point.id, code: codePoint, description: point.description, isMeasured: point.isMeasured });
+                        }
+                        return acc;
+                    }, new Map()).values()
+                );
+
+                const measuredPoints = points.filter(p => p.isMeasured).length;
 
                 let newStatus: 'all' | 'partial' | 'none' = 'none';
 
+                console.log('measuredPoints', measuredPoints);
+                console.log('assetId', assetId);
                 if (measuredPoints === relatedPoints.length) {
                     newStatus = 'all';
                 } else if (measuredPoints > 0) {

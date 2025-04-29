@@ -32,12 +32,11 @@ const LoginScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     try {
       const data = await login(email, password);
       if (data) {
-        console.log(data.data.token);
         // Guardar la información del usuario en AsyncStorage
         await AsyncStorage.setItem("userToken", data.data.token);
-        await AsyncStorage.setItem("userName", data.data.user.name);
-        await AsyncStorage.setItem("userEmail", data.data.user.email);
-        await AsyncStorage.setItem("userImage", data.data.user.imageCompany);
+        await AsyncStorage.setItem("userName", data.data.user.name || '');
+        await AsyncStorage.setItem("userEmail", data.data.user.email || '');
+        await AsyncStorage.setItem("userImage", data.data.user.imageCompany || '');
         await AsyncStorage.setItem("userMenu", JSON.stringify(data.data.menu));
         navigation.replace("HomeContainer");
       } else {
