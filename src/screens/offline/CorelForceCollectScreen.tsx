@@ -736,13 +736,7 @@ export const CorelForceCollectScreen: React.FC<{
     const hideModalAlert = () => {
         setModalAlertVisible(false);
     };
-    const handleDateChange = (event: any, date?: Date) => {
-        setShowPicker(false);
-        if (date) {
-            setSelectedDate(date);
-            // Aquí puedes cargar los datos de esa fecha
-        }
-    };
+
 
     const clearGraphs = () => {
         setDataXWToDraw(null);

@@ -162,7 +162,12 @@ export const getPoint = async (pointId: number): Promise<Point | undefined> => {
 
 export const getPlantSelectedStore = async (): Promise<number> => {
     const plantSelectedId = await AsyncStorage.getItem(PLANT_SELECTED_KEY);
+    console.log('getPlantSelectedStore', plantSelectedId);
     return plantSelectedId ? parseInt(plantSelectedId) : -1;
+};
+export const setPlantSelectedStore = async (plantId: number): Promise<void> => {
+    console.log('setPlantSelectedStore', plantId);
+     await AsyncStorage.setItem(PLANT_SELECTED_KEY, plantId.toString());
 };
 
 export const addBandsInfoToStore = async (bandsInfo: any) => {

@@ -5,7 +5,7 @@ import {
     Text,
     TouchableOpacity,
     StyleSheet,
-    useColorScheme,
+    useColorScheme, ActivityIndicator, Modal,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { TouchableRipple } from 'react-native-paper';
@@ -13,6 +13,12 @@ import {getPlantsBasic} from '../../services/storage.service';
 import {Plant} from '../../types/plant.ts';
 import {useFocusEffect} from '@react-navigation/native';
 import {PlantListModal} from '../database_setup/plant/PlantListModal';
+import {getPlantSelectedStore, setPlantSelectedStore} from "../../api/services/utilService.ts";
+import {mapByAssetsGroup, saveCollectDataSynced} from "../../api/services/syncSurveyService.ts";
+import {SurveySync} from "../../types/survey-sync.ts";
+import SyncModal from "./SyncModal.tsx";
+import {sendSurvey} from "../../api/services/offlineService.ts";
+import {LoadingModalProgress} from "../../components/common/LoadingModalProgress.tsx";
 
 
 export const CorelForceHomeScreen: React.FC<{
@@ -26,6 +32,14 @@ export const CorelForceHomeScreen: React.FC<{
 
     const [plants, setPlants] = useState<Plant[]>([]);
     const [modalPlantVisible, setModalPlantVisible] = useState(false);
+    const [modalSyncLoadingVisible, setModalSyncLoadingVisible] = useState(false);
+    const [surveysToSync, setSurveysToSync] = useState<SurveySync[]>([]);
+    const [modalSyncVisible, setModalSyncVisible] = useState(false);
+    const [modalAlertMessage, setModalAlertMessage] = useState('');
+    const [modalAlertVisible, setModalAlertVisible] = useState(false);
+    const [loadingSyncVisible, setLoadingSyncVisible] = useState(false);
+    const [syncProgress, setSyncProgress] = useState({ completed: 0, total: 0, failed: 0 });
+
 
     useFocusEffect(
         React.useCallback(() => {
@@ -34,6 +48,32 @@ export const CorelForceHomeScreen: React.FC<{
         }, [])
     );
 
+    const showModalSync = async (plantId: number) => {
+
+        console.log('showModalSync', plantId);
+        setModalSyncLoadingVisible(true);
+
+        const surveys = await mapByAssetsGroup(plantId);
+
+
+        console.log(surveys);
+        setSurveysToSync(surveys);
+        setModalSyncLoadingVisible(false);
+
+        if (surveys.length > 0) {
+            console.log('setModalSyncVisible', true);
+            setModalSyncVisible(true);
+        } else {
+            showModalAlert('No data to sync');
+        }
+    };
+    const showModalAlert = (message: string) => {
+        setModalAlertMessage(message);
+        setModalAlertVisible(true);
+    };
+    const hideModalAlert = () => {
+        setModalAlertVisible(false);
+    };
     const getPlants = () => {
         console.log('getPlants');
 
@@ -47,6 +87,63 @@ export const CorelForceHomeScreen: React.FC<{
                 console.error('Error obteniendo plantas:', error);
                 setPlants([]);
             });
+    };
+    const handleSync = async (surveysSync: SurveySync[]) => {
+        const counter = { successCount: 0, failedCount: 0 } ;
+        if (surveysSync.length > 0) {
+            surveysSync.forEach(survey => survey.synced = null);
+
+            setLoadingSyncVisible(true);
+            setSyncProgress({ completed: 0, total: surveysSync.length, failed: 0 });
+
+            try {
+                const successfulUuids: string[] = [];
+                const batchSize = 10; // Batch size
+
+                for (let i = 0; i < surveysSync.length; i += batchSize) {
+                    const batch = surveysSync.slice(i, i + batchSize); // Take a group of 10
+
+                    const sendSurveyPromises = batch.map((survey) =>
+                        sendSurvey(survey)
+                            .then(() => {
+                                successfulUuids.push(...survey.uuids);
+                                survey.synced = true; // ✅ Mark as synced successfully
+                                counter.successCount++;
+                            })
+                            .catch((error) => {
+                                console.error(`❌ Failed to send survey ${survey.mawoiId}:`, error);
+                                survey.synced = false; // ❌ Mark as failed
+                                setSyncProgress((prev) => ({
+                                    ...prev,
+                                    failed: prev.failed + 1,
+                                }));
+                                counter.failedCount++;
+                            })
+                            .finally(() => {
+                                setSyncProgress((prev) => ({
+                                    ...prev,
+                                    completed: prev.completed + 1,
+                                }));
+                            })
+                    );
+
+                    await Promise.allSettled(sendSurveyPromises);
+                }
+
+                if (successfulUuids.length > 0) {
+                    await saveCollectDataSynced(surveysSync.filter(s => s.synced === true), surveysSync.filter(s => s.synced === false));
+                }
+
+                console.log(`✅ Surveys sent successfully: ${successfulUuids.length}`);
+            } catch (error) {
+                console.error('❌ Unexpected error during synchronization:', error);
+            } finally {
+                setLoadingSyncVisible(false);
+            }
+        }
+        console.log('✅ Surveys sent failed:', counter.failedCount);
+        console.log('✅ Surveys sent successfully:', counter.successCount);
+        return { successCount: counter.successCount, failedCount: counter.failedCount };
     };
 
     const PlantItem = ({ name, onPress, onReload, onMap, onCalendar }: any) => {
@@ -64,7 +161,7 @@ export const CorelForceHomeScreen: React.FC<{
 
                 <View style={styles.actions}>
                     <TouchableOpacity onPress={onReload}>
-                        <Icon name="reload" size={24} style={styles.icon} />
+                        <Icon name="sync" size={24} style={styles.icon} />
                     </TouchableOpacity>
                     <TouchableOpacity onPress={onMap}>
                         <Icon name="map-marker" size={24} style={styles.icon} />
@@ -76,8 +173,9 @@ export const CorelForceHomeScreen: React.FC<{
             </View>
         );
     };
-    const handlePlantPress = (plant: Plant) => {
+    const handlePlantPress = async (plant: Plant) => {
         console.log('🌿 Planta presionada:', plant.description);
+        await setPlantSelectedStore(plant.id);
         navigation.navigate('CorelForcePlantAssetScreen', {
             params: {
                 id: plant.id,
@@ -88,6 +186,38 @@ export const CorelForceHomeScreen: React.FC<{
 
     return (
         <View style={[styles.container, themeStyles.container]}>
+            <SyncModal
+                visible={modalSyncVisible}
+                onClose={() => setModalSyncVisible(false)}
+                surveys={surveysToSync}
+                onSync={handleSync}
+            />
+            <LoadingModalProgress
+                visible={loadingSyncVisible}
+                progressText={`Syncing ${syncProgress.completed} of ${syncProgress.total} surveys...`}
+            />
+            <Modal animationType="fade" transparent={true} visible={modalAlertVisible}>
+                <View style={styles.modalAlertContainer}>
+                    <View style={styles.modalAlertView}>
+                        <Text style={styles.modalAlertText}>{modalAlertMessage}</Text>
+                        <TouchableOpacity style={styles.modalAlertButton} onPress={hideModalAlert}>
+                            <Text style={styles.modalAlertButtonText}>OK</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+            <Modal
+                animationType="fade"
+                transparent={true}
+                visible={modalSyncLoadingVisible}
+            >
+                <View style={styles.loadingModalContainer}>
+                    <View style={styles.loadingModalView}>
+                        <ActivityIndicator size="large" color="#007bff"/>
+                        <Text style={styles.loadingModalText}>Processing...</Text>
+                    </View>
+                </View>
+            </Modal>
             <PlantListModal
                 visible={modalPlantVisible}
                 download={true}
@@ -110,7 +240,7 @@ export const CorelForceHomeScreen: React.FC<{
                     <PlantItem
                         name={item.description}
                         onPress={() => handlePlantPress(item)}
-                        onReload={() => console.log('↻ Recargar', item.description)}
+                        onReload={() => showModalSync(item.id)}
                         onMap={() => console.log('📍 Ver ubicación', item.description)}
                         onCalendar={() => console.log('📅 Ver calendario', item.description)}
                     />
@@ -131,6 +261,56 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginBottom: 16,
         alignSelf: 'center',
+    },
+    modalAlertContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    modalAlertView: {
+        width: 300,
+        padding: 30,
+        backgroundColor: 'white',
+        borderRadius: 10,
+        alignItems: 'center',
+    },
+    modalAlertText: {
+        fontSize: 16,
+        color: '#333',
+        fontWeight: 'bold',
+        marginBottom: 30,
+    },
+    modalAlertButton: {
+        borderRadius: 10,
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        elevation: 2,
+        marginHorizontal: 10,
+        backgroundColor: '#007bff',
+    },
+    modalAlertButtonText: {
+        color: '#fff',
+        fontWeight: 'bold',
+    },
+    loadingModalContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    },
+    loadingModalView: {
+        width: 200,
+        padding: 20,
+        backgroundColor: 'white',
+        borderRadius: 10,
+        alignItems: 'center',
+    },
+    loadingModalText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: '#007bff',
+        fontWeight: 'bold',
     },
     addButton: {
         backgroundColor: '#007bff',

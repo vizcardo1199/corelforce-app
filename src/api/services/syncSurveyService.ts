@@ -159,6 +159,7 @@ export const mapSurveyForSync = (mawoisStore) => {
     return surveys;
 };
 export const mapByAssetsGroup = async (plantId: number): Promise<SurveySync[]> => {
+    console.log('mapByAssetsGroup', plantId);
     const surveysCollection = database.get<Survey>('surveys');
 
     // 🔍 Buscar encuestas por planta
@@ -170,6 +171,7 @@ export const mapByAssetsGroup = async (plantId: number): Promise<SurveySync[]> =
     const surveyStores: SurveyStore[] = [];
 
     for (const survey of surveys) {
+        console.log('plantid survey', survey.plantId);
         const collects = (await survey.collects.fetch()).filter((collect) => collect.synced !== true);
 
         const surveyStore: SurveyStore = {
@@ -202,14 +204,7 @@ export const mapByAssetsGroup = async (plantId: number): Promise<SurveySync[]> =
     // 📦 Armar el objeto para sincronizar
     const grouped = generateSurveys(surveyStores);
     // console.log( await generateSurveysToSync(grouped));
-    generateSurveysToSync(grouped)
-        .then((value) => {
-            console.log(value);
-        })
-        .catch((error) => {
-            console.error('Error');
-            console.error(error);
-        });
+
     return await generateSurveysToSync(grouped);
 };
 
