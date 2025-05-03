@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "910892488788",
+    "project_id": "corelforce",
+    "storage_bucket": "corelforce.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:910892488788:android:036c3b376a2205c9df75c1",
+        "android_client_info": {
+          "package_name": "com.corelforcemobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDmGV08CdtcLrngXpWDZy8H8YgJPDxm2aw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

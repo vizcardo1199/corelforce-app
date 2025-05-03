@@ -2,10 +2,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import {Plant} from '../types/plant';
 import {Plant as PlantModel} from '../models/Plant.model';
 import {Asset as AssetModel} from '../models/Asset.model';
+import {Area as AreaModel} from '../models/Area.model';
+import {System as SystemModel} from '../models/System.model';
 import {PLANTS_KEY} from '../config/constants';
 import {Asset} from '../types/asset';
 import {upsertRecord} from '../database/upsert.ts';
 import {database} from "../database";
+import {Area} from "../types/area.ts";
+import {System} from "../types/system.ts";
 
 
 export const insertPlantWithAll = async (db,  plants: Plant[])=> {
@@ -66,22 +70,99 @@ export const getPlantsBasicOld = async (): Promise<Plant[]> => {
     }));
 };
 
-export const getPlantsBasic = async (): Promise<Plant[]> => {
+export const getPlantsBasic = async (): Promise<any[]> => {
     // await database.adapter.unsafeResetDatabase();
-    const collection = database.get<PlantModel>('plants');
+    const plants = await database.get<PlantModel>('plants').query().fetch();
 
-    const records = await collection.query().fetch();
+    const result = [];
 
-    const plants: Plant[] = records.map(p => ({
-        id: parseInt(p.id), // record.id es string, lo convertimos a number
-        code: p.code,
-        description: p.description,
-        areas: [], // opcional, puedes cargar las áreas por separado si las necesitas
-    }));
+    for (const plant of plants) {
+        let assetCount = 0;
 
-    return plants;
+        const areas = await plant.areas.fetch();
+        for (const area of areas) {
+            const systems = await area.systems.fetch();
+            for (const system of systems) {
+                const assets = await system.mawois.fetch();
+                assetCount += assets.length;
+            }
+        }
+
+        result.push({
+            id: parseInt(plant.id),
+            code: plant.code,
+            description: plant.description,
+            assetCount,
+        });
+    }
+
+    return result;
 };
 
+export const getAreasByPlantId = async (plantId: number): Promise<Area[]> => {
+
+    const plant = await database.get<PlantModel>('plants').find(plantId.toString());
+
+    const areas = await plant.areas.fetch();
+
+    return areas.map((a) => ({
+        id: parseInt(a.id), // recuerda que el ID en Watermelon es string
+        code: a.code,
+        description: a.description,
+        systems: [], // opcional, puedes cargarlos si los necesitas
+    }));
+
+};
+export const getSystemByAreaId = async (areaId: number): Promise<System[]> => {
+
+    const area = await database.get<AreaModel>('areas').find(areaId.toString());
+
+    const systems = await area.systems.fetch();
+
+    return systems.map((a) => ({
+        id: parseInt(a.id), // recuerda que el ID en Watermelon es string
+        code: a.code,
+        description: a.description,
+        systems: [], // opcional, puedes cargarlos si los necesitas
+    }));
+
+};
+
+export const getHierarchyInfo = async (systemId: number): Promise<any> => {
+    const system = await database.get<SystemModel>('systems').find(systemId.toString());
+    const area = await system.area.fetch();
+
+    return {
+        system: system.description,
+        area: area.description,
+    }
+}
+
+export const getAssetsBySystemId = async (systemId: number): Promise<any> => {
+
+    const system = await database.get<SystemModel>('systems').find(systemId.toString());
+
+    const assets = await system.mawois.fetch();
+    const area = await system.area.fetch();
+    const plant = await area.plant.fetch();
+
+    const info = {
+        system: system.description,
+        area: area.description,
+        plant: plant.description,
+    }
+    const result = assets.map((a) => ({
+        id: parseInt(a.id), // recuerda que el ID en Watermelon es string
+        code: a.code,
+        description: a.description,
+        isMonoaxial: a.isMonoaxial,
+        isMeasured: a.isMeasured,
+        status: a.status,
+        points: [], // opcional, puedes cargarlos si los necesitas
+    }));
+
+    return { info, assets: result};
+};
 export const getAssetsByPlantId = async (plantId: number): Promise<Asset[]> => {
 
     const plant = await database.get<PlantModel>('plants').find(plantId.toString());

@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from 'react';
+import React, {useState} from 'react';
 import {
     View,
     Text,
@@ -9,19 +9,15 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import {TouchableRipple} from "react-native-paper";
-import {getAssetsByPlantId} from "../../services/storage.service";
+import {getAssetsBySystemId} from "../../services/storage.service";
 import {Asset} from "../../types/asset";
 import {useFocusEffect} from "@react-navigation/native";
-
-
 
 const statusIcon = {
     ok: { name: 'check-circle', color: 'green' },
     warning: { name: 'check-circle-outline', color: 'green' },
     error: { name: 'close-circle', color: 'red' },
 };
-
-
 
 export const CorelForcePlantAssetScreen: React.FC<{
     navigation: any;
@@ -32,12 +28,16 @@ export const CorelForcePlantAssetScreen: React.FC<{
     const theme = scheme === 'dark' ? darkTheme : lightTheme;
 
     const [assets, setAssets] = useState<Asset[]>([]);
+    const [info, setInfo] = useState<any>({});
 
     useFocusEffect(
         React.useCallback(() => {
-            getAssetsByPlantId(route.params.params.id)
-                .then(assets => {
-                    console.log(assets)
+            getAssetsBySystemId(route.params.params.id)
+                .then((data: any) => {
+                    const assets = data.assets;
+                    const info = data.info;
+                    setInfo(info);
+                    console.log(info)
                     setAssets(assets)
                 }).catch(error => {
                 console.error('Error obteniendo plantas:', error);
@@ -58,7 +58,10 @@ export const CorelForcePlantAssetScreen: React.FC<{
                                  rippleColor="rgba(0, 0, 0, .1)"
                                  borderless={false}
                                  underlayColor="transparent">
-                    <Text style={styles.assetText}>{description}</Text>
+                    <View>
+                        <Text style={styles.assetText}>{code}</Text>
+                        <Text style={styles.assetText}>{description}</Text>
+                    </View>
                 </TouchableRipple>
                 <Icon name={name} size={24} color={color} />
                 <TouchableOpacity style={styles.iconButton}>
@@ -84,8 +87,13 @@ export const CorelForcePlantAssetScreen: React.FC<{
     return (
         <View style={[styles.container, theme.background]}>
             <View style={styles.header}>
-                <Icon name="factory" size={30} color="#003366" />
-                <Text style={[styles.title, theme.text]}>Corelusa Plant Services</Text>
+                <Text style={[styles.title, theme.text]}>{info.plant}</Text>
+            </View>
+            <View style={styles.header}>
+                <Text style={[styles.title, theme.text]}>{info.area}</Text>
+            </View>
+            <View style={styles.header}>
+                <Text style={[styles.title, theme.text]}>{info.system}</Text>
             </View>
 
             <FlatList
@@ -110,8 +118,8 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         alignItems: 'center',
         gap: 10,
-        marginBottom: 20,
-        alignSelf: 'center',
+        marginBottom: 2,
+        alignSelf: 'flex-start'
     },
     title: {
         fontSize: 20,

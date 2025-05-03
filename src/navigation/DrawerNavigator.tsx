@@ -21,6 +21,8 @@ import {getFocusedRouteNameFromRoute, useFocusEffect} from '@react-navigation/na
 import {CorelForcePlantAssetScreen} from "../screens/offline/CorelForcePlantAssetScreen.tsx";
 import {CorelForcePointScreen} from "../screens/offline/CorelForcePointScreen.tsx";
 import {CorelForceCollectScreen} from "../screens/offline/CorelForceCollectScreen.tsx";
+import {CorelForceAreaScreen} from "../screens/offline/CorelForceAreaScreen.tsx";
+import {CorelForceSystemScreen} from "../screens/offline/CorelForceSystemScreen.tsx";
 const Drawer = createDrawerNavigator();
 const Stack = createStackNavigator();
 const CustomDrawerContent = (props: any) => {
@@ -82,6 +84,8 @@ export const  CorelForceStack: React.FC = () => {
             <Stack.Screen name="CorelForcePlantAssetScreen" component={CorelForcePlantAssetScreen} options={{ headerShown: false }}/>
             <Stack.Screen name="CorelForcePointScreen" component={CorelForcePointScreen} options={{ headerShown: false }}/>
             <Stack.Screen name="CorelForceCollectScreen" component={CorelForceCollectScreen} options={{ headerShown: true, title: 'Corel Force' }}/>
+            <Stack.Screen name="CorelForceAreaScreen" component={CorelForceAreaScreen} options={{ headerShown: false, title: 'Corel Force - Area' }}/>
+            <Stack.Screen name="CorelForceSystemScreen" component={CorelForceSystemScreen} options={{ headerShown: false, title: 'Corel Force - System' }}/>
         </Stack.Navigator>
     );
 

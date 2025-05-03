@@ -52,8 +52,6 @@ export const CorelForcePointScreen: React.FC<{
     useFocusEffect(
         React.useCallback(() => {
 
-            console.log('consultando points');
-            console.log(route.params.params);
             setAssetDescription(route.params.params.description);
             setAssetId(route.params.params.id);
             setAssetCode(route.params.params.code);
@@ -82,7 +80,11 @@ export const CorelForcePointScreen: React.FC<{
             <View style={styles.componentRow} onPress={pointHandler}>
                 <Icon name="pin" size={24} color="#555" />
                 <TouchableRipple style={styles.componentBox} onPress={() => pointHandler(id, code, description)}>
-                    <Text style={styles.componentText}>{code}</Text>
+                    <View style={styles.row}>
+                        <Text style={styles.componentText}>{code}</Text>
+                        <Text style={styles.description}>{description}</Text>
+                    </View>
+
                 </TouchableRipple>
                 <Icon name={name} size={24} color={color} />
                 <TouchableOpacity style={styles.iconButton}>
@@ -144,6 +146,11 @@ const styles = StyleSheet.create({
         borderRadius: 8,
         padding: 10,
     },
+    row: {
+        flexDirection: 'row',
+
+        alignItems: 'center',
+    },
     componentBox: {
         flex: 1,
         borderWidth: 1,
@@ -151,10 +158,21 @@ const styles = StyleSheet.create({
         borderRadius: 6,
         paddingVertical: 4,
         paddingHorizontal: 10,
+        alignSelf: 'center',
+        justifyContent: 'center',
     },
     componentText: {
         fontSize: 16,
-        fontWeight: '600',
+        fontWeight: 'bold',
+        marginRight: 15,
+
+        alignSelf: 'center',
+    },
+    description: {
+        fontSize: 16,
+        color: '#333',
+        marginBottom: 0, // <--- cambia esto si lo quieres centrado
+        alignSelf: 'auto',
     },
     iconButton: {
         padding: 4,

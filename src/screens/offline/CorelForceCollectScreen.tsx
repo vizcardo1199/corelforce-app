@@ -12,6 +12,7 @@ import {
     View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/FontAwesome';
+import * as Sentry from '@sentry/react-native';
 import {
     findPointForCollectData,
     findPointForCollectDataByCode,
@@ -476,6 +477,7 @@ export const CorelForceCollectScreen: React.FC<{
                     // set storage latest collect data
                     setLocalStorageLatestCollectData()
                         .then(() => {
+                            Sentry.captureException(new Error("¡Error de prueba manual!"));
                             console.log('Datos recolectados guardados en el dispositivo');
                             setNoDataMeasured(false);
                         })

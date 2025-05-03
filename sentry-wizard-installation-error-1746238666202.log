@@ -1,0 +1,61 @@
+npm warn cli npm v11.3.0 does not support Node.js v18.20.4. This version of npm supports the following node versions: `^20.17.0 || >=22.9.0`. You can find the latest version at https://nodejs.org/.
+npm warn ERESOLVE overriding peer dependency
+npm warn While resolving: @firebase/auth@1.9.0
+npm warn Found: @react-native-async-storage/async-storage@2.1.2
+npm warn node_modules/@react-native-async-storage/async-storage
+npm warn   @react-native-async-storage/async-storage@"^2.1.2" from the root project
+npm warn
+npm warn Could not resolve dependency:
+npm warn peerOptional @react-native-async-storage/async-storage@"^1.18.1" from @firebase/auth@1.9.0
+npm warn node_modules/@firebase/auth
+npm warn   @firebase/auth@"1.9.0" from @firebase/auth-compat@0.5.18
+npm warn   node_modules/@firebase/auth-compat
+npm warn   1 more (firebase)
+npm warn
+npm warn Conflicting peer dependency: @react-native-async-storage/async-storage@1.24.0
+npm warn node_modules/@react-native-async-storage/async-storage
+npm warn   peerOptional @react-native-async-storage/async-storage@"^1.18.1" from @firebase/auth@1.9.0
+npm warn   node_modules/@firebase/auth
+npm warn     @firebase/auth@"1.9.0" from @firebase/auth-compat@0.5.18
+npm warn     node_modules/@firebase/auth-compat
+npm warn     1 more (firebase)
+npm error code ERESOLVE
+npm error ERESOLVE could not resolve
+npm error
+npm error While resolving: @nozbe/with-observables@1.6.0
+npm error Found: @types/react@19.1.1
+npm error node_modules/@types/react
+npm error   peerOptional @types/react@"^19.0.0" from @react-native/virtualized-lists@0.79.0
+npm error   node_modules/@react-native/virtualized-lists
+npm error     @react-native/virtualized-lists@"0.79.0" from react-native@0.79.0
+npm error     node_modules/react-native
+npm error       peer react-native@"^0.0.0-0 || >=0.65 <1.0" from @react-native-async-storage/async-storage@2.1.2
+npm error       node_modules/@react-native-async-storage/async-storage
+npm error         @react-native-async-storage/async-storage@"^2.1.2" from the root project
+npm error       26 more (@react-native-community/checkbox, ...)
+npm error   @types/react@"*" from @types/react-native@0.70.19
+npm error   node_modules/@types/react-native
+npm error     @types/react-native@"^0.70" from @types/react-native-vector-icons@6.4.18
+npm error     node_modules/@types/react-native-vector-icons
+npm error       dev @types/react-native-vector-icons@"^6.4.18" from the root project
+npm error   4 more (@types/react-native-vector-icons, ...)
+npm error
+npm error Could not resolve dependency:
+npm error peerOptional @types/react@"^16||^17||^18" from @nozbe/with-observables@1.6.0
+npm error node_modules/@nozbe/with-observables
+npm error   @nozbe/with-observables@"^1.6.0" from the root project
+npm error
+npm error Conflicting peer dependency: @types/react@18.3.20
+npm error node_modules/@types/react
+npm error   peerOptional @types/react@"^16||^17||^18" from @nozbe/with-observables@1.6.0
+npm error   node_modules/@nozbe/with-observables
+npm error     @nozbe/with-observables@"^1.6.0" from the root project
+npm error
+npm error Fix the upstream dependency conflict, or retry
+npm error this command with --force or --legacy-peer-deps
+npm error to accept an incorrect (and potentially broken) dependency resolution.
+npm error
+npm error
+npm error For a full report see:
+npm error /home/jrcotos/.npm/_logs/2025-05-03T02_17_44_677Z-eresolve-report.txt
+npm error A complete log of this run can be found in: /home/jrcotos/.npm/_logs/2025-05-03T02_17_44_677Z-debug-0.log

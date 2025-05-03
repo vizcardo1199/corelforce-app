@@ -19,6 +19,7 @@ import {SurveySync} from "../../types/survey-sync.ts";
 import SyncModal from "./SyncModal.tsx";
 import {sendSurvey} from "../../api/services/offlineService.ts";
 import {LoadingModalProgress} from "../../components/common/LoadingModalProgress.tsx";
+import {CorelForceAreaScreen} from "./CorelForceAreaScreen.tsx";
 
 
 export const CorelForceHomeScreen: React.FC<{
@@ -156,7 +157,10 @@ export const CorelForceHomeScreen: React.FC<{
                     borderless={false}
                     underlayColor="transparent"
                 >
-                    <Text style={styles.plantName}>{name}</Text>
+                    <View>
+                        <Text style={styles.plantName}>{name}</Text>
+                    </View>
+
                 </TouchableRipple>
 
                 <View style={styles.actions}>
@@ -176,7 +180,7 @@ export const CorelForceHomeScreen: React.FC<{
     const handlePlantPress = async (plant: Plant) => {
         console.log('🌿 Planta presionada:', plant.description);
         await setPlantSelectedStore(plant.id);
-        navigation.navigate('CorelForcePlantAssetScreen', {
+        navigation.navigate('CorelForceAreaScreen', {
             params: {
                 id: plant.id,
                 description: plant.description,
