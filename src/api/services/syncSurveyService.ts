@@ -158,6 +158,109 @@ export const mapSurveyForSync = (mawoisStore) => {
     });
     return surveys;
 };
+
+export const deleteCollect = async (assetId: number, pointId: number, fecha: string) => {
+    const surveys = database.get('surveys');
+
+    const existingSurvey = await surveys
+        .query(
+            Q.where('asset_id', assetId),
+            Q.where('point_id', pointId)
+        )
+        .fetch();
+
+    if (existingSurvey.length === 0) {
+        console.log('Survey no encontrado');
+        return;
+    }
+
+    const survey = existingSurvey[0];
+
+    // Obtener las collects asociadas
+    const collects = await survey.collections.get('collects')
+        .query(Q.where('date', fecha))
+        .fetch();
+
+    if (collects.length === 0) {
+        console.log('No se encontró una collect con esa fecha');
+        return;
+    }
+
+    // Eliminar dentro de una transacción
+    await database.write(async () => {
+        for (const collect of collects) {
+            await collect.destroyPermanently(); // hard-delete
+        }
+        // Buscar si quedan collects no sincronizadas
+
+        const surveys = database.get('surveys');
+
+        const existingSurveySaved = await surveys
+            .query(
+                Q.where('asset_id', assetId),
+                Q.where('point_id', pointId)
+            )
+            .fetch();
+        const surveySaved = existingSurveySaved[0];
+
+        const remainingUnsynced = await surveySaved.collections.get('collects')
+            .query(Q.where('synced', false),
+                Q.where('survey_id', surveySaved.id) )
+            .fetch();
+        console.log('remainingUnsynced')
+        console.log(remainingUnsynced)
+        console.log('surveySaved.id',surveySaved.id)
+        if (remainingUnsynced.length === 0) {
+            // No hay collects sin sincronizar → actualizar point
+            const point = await database.get<Point>('points').find(pointId?.toString());
+            if (point) {
+                await point.update(p => {
+                    p.isMeasured = false;
+                });
+                console.log('Campo isMeasured actualizado a false');
+            }
+        } else {
+            console.log('Aún existen collects no sincronizadas');
+        }
+        // Obtener todos los points del asset
+        const points = await database
+            .get<Point>('points')
+            .query(Q.where('asset_id', assetId?.toString()))
+            .fetch();
+
+        const pointsGroup: PointSelect[] = Array.from(
+            points.reduce((acc, point) => {
+                const codePoint = point.code.slice(0, 2); // Directamente usar slice para strings
+                if (!acc.has(codePoint)) {
+                    acc.set(codePoint, { id: point.id, code: codePoint, description: point.description, isMeasured: point.isMeasured });
+                }
+                return acc;
+            }, new Map()).values()
+        );
+        const measuredPoints = pointsGroup.filter(p => p.isMeasured).length;
+
+        let newStatus: 'all' | 'partial' | 'none' = 'none';
+
+        console.log('measuredPoints', measuredPoints);
+        console.log('totalPoints', pointsGroup.length);
+
+        if (measuredPoints === pointsGroup.length) {
+            newStatus = 'all';
+        } else if (measuredPoints > 0) {
+            newStatus = 'partial';
+        }
+
+        const asset = await database.get<Asset>('assets').find(assetId?.toString());
+
+        await asset.update(a => {
+            a.isMeasured = newStatus;
+        });
+
+        console.log(`Estado actualizado del asset ${assetId}: ${newStatus}`);
+    });
+
+    console.log('Collect eliminada correctamente');
+};
 export const mapByAssetsGroup = async (plantId: number): Promise<SurveySync[]> => {
     console.log('mapByAssetsGroup', plantId);
     const surveysCollection = database.get<Survey>('surveys');

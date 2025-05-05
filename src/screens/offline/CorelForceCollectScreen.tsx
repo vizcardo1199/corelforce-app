@@ -31,7 +31,7 @@ import {CollectData} from '../../types/collect-data';
 import {Picker} from '@react-native-picker/picker';
 import {BleManager, Device, State, Subscription} from 'react-native-ble-plx';
 import {useNavigation} from '@react-navigation/native';
-import {mapByAssetsGroup, saveCollectDataSynced} from '../../api/services/syncSurveyService.ts';
+import {deleteCollect, mapByAssetsGroup, saveCollectDataSynced} from '../../api/services/syncSurveyService.ts';
 import {SurveySync} from '../../types/survey-sync';
 import {Buffer} from 'buffer';
 import {format, parse} from 'date-fns/index';
@@ -160,7 +160,7 @@ export const CorelForceCollectScreen: React.FC<{
     const [modalSyncLoadingVisible, setModalSyncLoadingVisible] = useState(false);
     const [modalAlertMessageVisible, setModalAlertMessageVisible] = useState(false);
     const [syncProgress, setSyncProgress] = useState({ completed: 0, total: 0, failed: 0 });
-
+    const [loadingModalVisible, setLoadingModalVisible] = useState(false);
 
     useEffect(() => {
 
@@ -174,7 +174,30 @@ export const CorelForceCollectScreen: React.FC<{
         setAssetSelected(route.params.params.assetId);
         setPointDescription(route.params.params.pointDescription);
 
-        getSurveyFromDB(route.params.params.assetId!, route.params.params.pointId!)
+        findCollects(route.params.params.assetId!, route.params.params.pointId!);
+
+
+        connectDeviceFromGlobal()
+            .then(() => {
+                console.log('Device connected from global');
+            })
+            .catch((error) => {
+                console.error('Error al conectar el dispositivo', error);
+            });
+    }, []);
+
+    useEffect(() => {
+        const onChange = ({ window }) => {
+            setScreenWidth(window.width);
+        };
+
+        const subscription = Dimensions.addEventListener('change', onChange);
+
+        return () => subscription?.remove(); // Limpieza del listener
+    }, []);
+
+    const findCollects = (assetId: number, pointId: number) => {
+        getSurveyFromDB(assetId!, pointId)
             .then(async (survey) => {
                 console.log('Datos recolectados obtenidos del dispositivo');
                 if (survey) {
@@ -201,26 +224,7 @@ export const CorelForceCollectScreen: React.FC<{
             .catch((error) => {
                 console.error('Error al obtener los datos recolectados', error);
             });
-
-        connectDeviceFromGlobal()
-            .then(() => {
-                console.log('Device connected from global');
-            })
-            .catch((error) => {
-                console.error('Error al conectar el dispositivo', error);
-            });
-    }, []);
-
-    useEffect(() => {
-        const onChange = ({ window }) => {
-            setScreenWidth(window.width);
-        };
-
-        const subscription = Dimensions.addEventListener('change', onChange);
-
-        return () => subscription?.remove(); // Limpieza del listener
-    }, []);
-
+    }
     const requestBluetoothPermissions = async (): Promise<boolean> => {
         if (Platform.OS === 'android') {
             try {
@@ -251,7 +255,11 @@ export const CorelForceCollectScreen: React.FC<{
     };
 
     const confirmDelete = async (assetId: number, pointId: number, date: string) => {
-        console.log(assetId, pointId, date);
+        setLoadingModalVisible(true);
+        await deleteCollect(assetId, pointId, date);
+        findCollects(assetId, pointId);
+        setLoadingModalVisible(false);
+        setModalAlertDeleteVisible(false);
     }
     const checkBluetoothState = async (): Promise<boolean> => {
         const state = await BluetoothStateManager.getState();
@@ -413,112 +421,120 @@ export const CorelForceCollectScreen: React.FC<{
     };
 
     const processData = (data: any) => {
-        let message: any;
         try {
-            message = Buffer.from(data, 'base64').toString('utf-8');
-            // console.log('Datos recibidos:', message);
-        } catch (error) {
-            console.error('Error al procesar datos:', error);
-        }
-
-        if (message && MARKERS.includes(message)) {
-            console.log('Received data...', message);
-            if (message === 'TIME_DOMAIN') {
-                console.log('Init data in time domain.');
-                setTextLoading(`Receiving ${eventActive} data...`);
-                // updateMessage(eventActive);
-                currentDataType = 'time_domain';
-                timeDomainData = [];
-                partialDataBuffer = new ArrayBuffer(0);
-            } else if (message === 'END_TIME_DOMAIN') {
-                console.log('End data in time domain.');
-                currentDataType = null;
-                partialDataBuffer = new ArrayBuffer(0);
-                pointWithCollectData[eventActive + '_W'] = timeDomainData;
-                getDataToDraw(eventActive + '_W').then(() => {
-                    console.log('Data to draw');
-                }).catch((err) => {
-                    console.log('Error al obtener datos a dibujar', err);
-                });
-                // drawAxios(eventActive + "_W"), 100;
-            } else if (message === 'FREQUENCY_DOMAIN') {
-                console.log('Init data in frequency domain.');
-                // updateMessage(eventActive);
-                setTextLoading(`Receiving ${eventActive} data...`);
-                currentDataType = 'frequency_domain';
-                frequencyDomainData = [];
-                partialDataBuffer = new ArrayBuffer(0);
-            } else if (message === 'END_FREQUENCY_DOMAIN') {
-                console.log('End data in frequency domain.');
-                currentDataType = null;
-                partialDataBuffer = new ArrayBuffer(0);
-                pointWithCollectData[eventActive + '_S'] =
-                    processSpectra(frequencyDomainData);
-                getDataToDraw(eventActive + '_S').then(() => {
-                    console.log('Data to draw');
-                }).catch((err) => {
-                    console.log('Error al obtener datos a dibujar', err);
-                });
-                // drawAxios(eventActive + "_S"), 100;
-                receivingData = false;
-
-                console.log(eventActive);
-                if (eventActive != 'NEXT_Z') {
-                    // call next function
-                    eventActive = eventActive.includes('_X') ? 'NEXT_Y' : 'NEXT_Z';
-                    // writeOnCharacteristic("NEXT_X");
-                    writeOnSensorCharacteristic(eventActive)
-                        .then(() => {
-                            console.log('NEXT_X sent');
-                        });
-
-                } else {
-                    console.log('iniciando guardado de datos');
-                    // set storage latest collect data
-                    setLocalStorageLatestCollectData()
-                        .then(() => {
-                            Sentry.captureException(new Error("¡Error de prueba manual!"));
-                            console.log('Datos recolectados guardados en el dispositivo');
-                            setNoDataMeasured(false);
-                        })
-                        .catch((error) => {
-                            console.error('Error al guardar los datos recolectados', error);
-                        })
-                        .finally(() => {
-                            setIsReceivingData(false);
-                            setTextLoading('');
-                            listenerEvent?.remove();
-                        });
-
-                }
+            let message: any;
+            try {
+                message = Buffer.from(data, 'base64').toString('utf-8');
+                // console.log('Datos recibidos:', message);
+            } catch (error) {
+                console.error('Error al procesar datos:', error);
             }
-        } else {
-            // Asumir que son datos binarios
-            if (
-                currentDataType === 'time_domain' ||
-                currentDataType === 'frequency_domain'
-            ) {
-                partialDataBuffer = concatBuffers(partialDataBuffer, Buffer.from(data, 'base64'));
 
-                // Desempaquetar los doubles cuando tengamos suficientes bytes
-                while (partialDataBuffer.byteLength >= 8) {
-                    const chunk = partialDataBuffer.slice(0, 8);
-                    partialDataBuffer = partialDataBuffer.slice(8);
+            if (message && MARKERS.includes(message)) {
+                console.log('Received data...', message);
+                if (message === 'TIME_DOMAIN') {
+                    console.log('Init data in time domain.');
+                    setTextLoading(`Receiving ${eventActive} data...`);
+                    // updateMessage(eventActive);
+                    currentDataType = 'time_domain';
+                    timeDomainData = [];
+                    partialDataBuffer = new ArrayBuffer(0);
+                } else if (message === 'END_TIME_DOMAIN') {
+                    console.log('End data in time domain.');
+                    currentDataType = null;
+                    partialDataBuffer = new ArrayBuffer(0);
+                    pointWithCollectData[eventActive + '_W'] = timeDomainData;
+                    getDataToDraw(eventActive + '_W').then(() => {
+                        console.log('Data to draw');
+                    }).catch((err) => {
+                        console.log('Error al obtener datos a dibujar', err);
+                    });
+                    // drawAxios(eventActive + "_W"), 100;
+                } else if (message === 'FREQUENCY_DOMAIN') {
+                    console.log('Init data in frequency domain.');
+                    // updateMessage(eventActive);
+                    setTextLoading(`Receiving ${eventActive} data...`);
+                    currentDataType = 'frequency_domain';
+                    frequencyDomainData = [];
+                    partialDataBuffer = new ArrayBuffer(0);
+                } else if (message === 'END_FREQUENCY_DOMAIN') {
+                    console.log('End data in frequency domain.');
+                    currentDataType = null;
+                    partialDataBuffer = new ArrayBuffer(0);
+                    pointWithCollectData[eventActive + '_S'] =
+                        processSpectra(frequencyDomainData);
+                    getDataToDraw(eventActive + '_S').then(() => {
+                        console.log('Data to draw');
+                    }).catch((err) => {
+                        console.log('Error al obtener datos a dibujar', err);
+                    });
+                    // drawAxios(eventActive + "_S"), 100;
+                    receivingData = false;
 
-                    const miniDataView = new DataView(chunk);
+                    console.log(eventActive);
+                    if (eventActive != 'NEXT_Z') {
+                        // call next function
+                        eventActive = eventActive.includes('_X') ? 'NEXT_Y' : 'NEXT_Z';
+                        // writeOnCharacteristic("NEXT_X");
+                        writeOnSensorCharacteristic(eventActive)
+                            .then(() => {
+                                console.log('NEXT_X sent');
+                            });
 
-                    const value = miniDataView.getFloat64(0, true);
+                    } else {
+                        console.log('iniciando guardado de datos');
+                        // set storage latest collect data
+                        setLocalStorageLatestCollectData()
+                            .then(() => {
+                                console.log('Datos recolectados guardados en el dispositivo');
+                                setNoDataMeasured(false);
+                            })
+                            .catch((error) => {
+                                Sentry.captureException(error);
+                                console.error('Error al guardar los datos recolectados', error);
+                            })
+                            .finally(() => {
+                                setIsReceivingData(false);
+                                setTextLoading('');
+                                listenerEvent?.remove();
+                            });
 
-                    if (currentDataType === 'time_domain') {
-                        timeDomainData.push(value);
-                        // console.log("timeDomainData", timeDomainData);
-                    } else if (currentDataType === 'frequency_domain') {
-                        frequencyDomainData.push(value);
                     }
                 }
             } else {
-                console.log('Datos binarios recibidos sin tipo específico. Ignorando.');
+                // Asumir que son datos binarios
+                if (
+                    currentDataType === 'time_domain' ||
+                    currentDataType === 'frequency_domain'
+                ) {
+                    partialDataBuffer = concatBuffers(partialDataBuffer, Buffer.from(data, 'base64'));
+
+                    // Desempaquetar los doubles cuando tengamos suficientes bytes
+                    while (partialDataBuffer.byteLength >= 8) {
+                        const chunk = partialDataBuffer.slice(0, 8);
+                        partialDataBuffer = partialDataBuffer.slice(8);
+
+                        const miniDataView = new DataView(chunk);
+
+                        const value = miniDataView.getFloat64(0, true);
+
+                        if (currentDataType === 'time_domain') {
+                            timeDomainData.push(value);
+                            // console.log("timeDomainData", timeDomainData);
+                        } else if (currentDataType === 'frequency_domain') {
+                            frequencyDomainData.push(value);
+                        }
+                    }
+                } else {
+                    console.log('Datos binarios recibidos sin tipo específico. Ignorando.');
+                }
             }
+        }catch (error) {
+            Sentry.captureException(error);
+            console.error('Error al procesar datos', error);
+            setIsReceivingData(false);
+            setTextLoading('');
+            listenerEvent?.remove();
         }
     };
 
@@ -1030,7 +1046,7 @@ export const CorelForceCollectScreen: React.FC<{
                     {renderSelectorDates()}
                     <Icon name="camera" size={24} color="black"/>
                     <TouchableOpacity  onPress={() => showModalAlertDelete(true)}>
-                        <Icon name="calendar" size={24} color="red"/>
+                        <Icon name="trash" size={30} color="red"/>
                     </TouchableOpacity>
 
                 </View>
@@ -1273,10 +1289,10 @@ export const CorelForceCollectScreen: React.FC<{
                         <View style={styles.modalAlertView}>
                             <Text style={styles.modalAlertText}>are you sure you want to delete collected data?</Text>
                             <TouchableOpacity style={styles.modalAlertButton} onPress={() => setModalAlertDeleteVisible(false)}>
-                                <Text style={styles.modalAlertButtonText}>Cancelar</Text>
+                                <Text style={styles.modalAlertButtonText}>Cancel</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={styles.modalAlertButton} onPress={async () => await confirmDelete(assetSelected!, pointSelected!, dateMeasuredSelected!)}>
-                                <Text style={styles.modalAlertButtonText}>Eliminar</Text>
+                                <Text style={styles.modalAlertButtonText}>Delete</Text>
                             </TouchableOpacity>
                         </View>
                     </View>
@@ -1316,6 +1332,7 @@ export const CorelForceCollectScreen: React.FC<{
                         </View>
                     </View>
                 </Modal>
+                    <LoadingModal visible={loadingModalVisible}></LoadingModal>
                     <LoadingModalProgress
                         visible={loadingSyncVisible}
                         progressText={`Syncing ${syncProgress.completed} of ${syncProgress.total} surveys...`}
@@ -1323,7 +1340,7 @@ export const CorelForceCollectScreen: React.FC<{
                     <Modal visible={modalVisible} transparent animationType="slide">
                         <View style={styles.modalOverlay}>
                             <View style={styles.modalContent}>
-                                <Text style={styles.modalTitle}>Valores</Text>
+                                <Text style={styles.modalTitle}>Values</Text>
 
                                 <FlatList
                                     data={dataToShow}
@@ -1335,7 +1352,7 @@ export const CorelForceCollectScreen: React.FC<{
                                 />
 
                                 <TouchableOpacity style={styles.closeButton} onPress={() => setModalVisible(false)}>
-                                    <Text style={styles.closeButtonText}>Cerrar</Text>
+                                    <Text style={styles.closeButtonText}>Close</Text>
                                 </TouchableOpacity>
                             </View>
                         </View>
@@ -1430,6 +1447,7 @@ const styles = StyleSheet.create({
         elevation: 2,
         marginHorizontal: 10,
         backgroundColor: '#007bff',
+        marginBottom: 10,
     },
     modalAlertButtonText: {
         color: '#fff',
