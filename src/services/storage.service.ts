@@ -74,10 +74,12 @@ export const getPlantsBasic = async (): Promise<any[]> => {
     // await database.adapter.unsafeResetDatabase();
     const plants = await database.get<PlantModel>('plants').query().fetch();
 
+
     const result = [];
 
     for (const plant of plants) {
         let assetCount = 0;
+        let assetsCollecteds = 0;
 
         const areas = await plant.areas.fetch();
         for (const area of areas) {
@@ -85,6 +87,7 @@ export const getPlantsBasic = async (): Promise<any[]> => {
             for (const system of systems) {
                 const assets = await system.mawois.fetch();
                 assetCount += assets.length;
+                assetsCollecteds += assets.filter((a) => a.isMeasured == 'all' || a.isMeasured == 'partial').length;
             }
         }
 
@@ -93,6 +96,7 @@ export const getPlantsBasic = async (): Promise<any[]> => {
             code: plant.code,
             description: plant.description,
             assetCount,
+            assetsCollecteds
         });
     }
 

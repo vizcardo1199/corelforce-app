@@ -19,7 +19,6 @@ import {SurveySync} from "../../types/survey-sync.ts";
 import SyncModal from "./SyncModal.tsx";
 import {sendSurvey} from "../../api/services/offlineService.ts";
 import {LoadingModalProgress} from "../../components/common/LoadingModalProgress.tsx";
-import {CorelForceAreaScreen} from "./CorelForceAreaScreen.tsx";
 
 
 export const CorelForceHomeScreen: React.FC<{
@@ -147,7 +146,7 @@ export const CorelForceHomeScreen: React.FC<{
         return { successCount: counter.successCount, failedCount: counter.failedCount };
     };
 
-    const PlantItem = ({ name, onPress, onReload, onMap, onCalendar }: any) => {
+    const PlantItem = ({ name, onPress, onReload, onMap, onCalendar, totalAssets, collectedAssets }: any) => {
         return (
             <View style={styles.itemContainer}>
                 <TouchableRipple
@@ -159,6 +158,8 @@ export const CorelForceHomeScreen: React.FC<{
                 >
                     <View>
                         <Text style={styles.plantName}>{name}</Text>
+                        <Text style={styles.plantName}>Total Assets: {totalAssets}</Text>
+                        <Text style={styles.plantName}>Assets Collected: {collectedAssets}</Text>
                     </View>
 
                 </TouchableRipple>
@@ -247,6 +248,8 @@ export const CorelForceHomeScreen: React.FC<{
                         onReload={() => showModalSync(item.id)}
                         onMap={() => console.log('📍 Ver ubicación', item.description)}
                         onCalendar={() => console.log('📅 Ver calendario', item.description)}
+                        totalAssets={item.assetCount}
+                        collectedAssets={item.assetsCollecteds}
                     />
                 )}
             />
