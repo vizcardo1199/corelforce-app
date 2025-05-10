@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useState, useRef} from 'react';
 import {
     View,
     FlatList,
@@ -21,6 +21,14 @@ import {sendSurvey} from "../../api/services/offlineService.ts";
 import {LoadingModalProgress} from "../../components/common/LoadingModalProgress.tsx";
 
 
+type SurveySyncLight = {
+    mawoiId: number;
+    assetDescription: string;
+    date: number;
+    points: string[];
+    synced?: boolean | null;
+};
+
 export const CorelForceHomeScreen: React.FC<{
     navigation: any;
     type: string;
@@ -33,13 +41,13 @@ export const CorelForceHomeScreen: React.FC<{
     const [plants, setPlants] = useState<Plant[]>([]);
     const [modalPlantVisible, setModalPlantVisible] = useState(false);
     const [modalSyncLoadingVisible, setModalSyncLoadingVisible] = useState(false);
-    const [surveysToSync, setSurveysToSync] = useState<SurveySync[]>([]);
+    const [surveysToSync, setSurveysToSync] = useState<SurveySyncLight[]>([]);
     const [modalSyncVisible, setModalSyncVisible] = useState(false);
     const [modalAlertMessage, setModalAlertMessage] = useState('');
     const [modalAlertVisible, setModalAlertVisible] = useState(false);
     const [loadingSyncVisible, setLoadingSyncVisible] = useState(false);
     const [syncProgress, setSyncProgress] = useState({ completed: 0, total: 0, failed: 0 });
-
+    const fullSurveysRef = useRef<SurveySync[]>([]);
 
     useFocusEffect(
         React.useCallback(() => {
@@ -55,12 +63,19 @@ export const CorelForceHomeScreen: React.FC<{
 
         const surveys = await mapByAssetsGroup(plantId);
 
+        fullSurveysRef.current = surveys;
+        const lightweightSurveys: SurveySyncLight[] = surveys.map((s) => ({
+            mawoiId: s.mawoiId,
+            assetDescription: s.assetDescription,
+            date: s.date,
+            points: s.points,
+            synced: null,
+        }));
 
-        console.log(surveys);
-        setSurveysToSync(surveys);
+        setSurveysToSync(lightweightSurveys);
         setModalSyncLoadingVisible(false);
 
-        if (surveys.length > 0) {
+        if (fullSurveysRef.current.length > 0) {
             console.log('setModalSyncVisible', true);
             setModalSyncVisible(true);
         } else {
@@ -195,7 +210,9 @@ export const CorelForceHomeScreen: React.FC<{
                 visible={modalSyncVisible}
                 onClose={() => setModalSyncVisible(false)}
                 surveys={surveysToSync}
-                onSync={handleSync}
+                onSync={async () => {
+                    return await handleSync(fullSurveysRef.current); // usar los datos completos
+                }}
             />
             <LoadingModalProgress
                 visible={loadingSyncVisible}

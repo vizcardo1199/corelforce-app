@@ -418,88 +418,90 @@ export const saveCollectDataSynced = async (successfulSurveys: SurveySync[], fai
     }
 };
 
-
 export const generateSurveysToSync = async (data: Survey[]): Promise<SurveySync[]> => {
-    console.log('generateSurveysToSync')
-    const result = await Promise.all(
-        data.map(async (survey: Survey) => {
-            const detail: SurveySync = {
-                date: survey.startDate,
-                mawoiId: survey.assetId,
-                assetDescription: survey.assetDescription,
-                points: survey.points.map((point) => point.code?.slice(0, -1)),
-                vars: [],
-                waveform: [],
-                spectrum: [],
-                uuids: survey.points.map((point) => point.uuid),
-            };
+    console.log('generateSurveysToSync');
+    const result: SurveySync[] = [];
 
-            const {mawoi: mawoiInMemory} = await findPointForCollectDataByMawoiId(survey.assetId)!;
-            survey.points.forEach((point) => {
-                const { pointDescription, code, pointId, collect } = point;
-                const vars = collect?.vars;
+    for (let i = 0; i < data.length; i++) {
+        const survey = data[i];
+        const detail: SurveySync = {
+            date: survey.startDate,
+            mawoiId: survey.assetId,
+            assetDescription: survey.assetDescription,
+            points: survey.points.map((point) => point.code?.slice(0, -1)),
+            vars: [],
+            waveform: [],
+            spectrum: [],
+            uuids: survey.points.map((point) => point.uuid),
+        };
 
-                const pointCode = point.code.slice(0, -1);
-                let pointX = null;
-                let pointY = null;
-                let pointZ = null;
+        const {mawoi: mawoiInMemory} = await findPointForCollectDataByMawoiId(survey.assetId)!;
+        survey.points.forEach((point) => {
+            const { pointDescription, code, pointId, collect } = point;
+            const vars = collect?.vars;
 
-                if (survey.isMonoaxial) {
-                    pointX = point;
-                } else {
-                    pointX = mawoiInMemory.points.find((p) =>
-                        (p.code == pointCode + "X") || p.code == pointCode + "H"
-                    );
-                    pointY = mawoiInMemory.points.find((p) =>
-                        (p.code == pointCode + "Y") || p.code == pointCode + "V"
-                    );
-                    pointZ = mawoiInMemory.points.find((p) =>
-                        (p.code == pointCode + "Z") || p.code == pointCode + "A"
-                    );
-                }
+            const pointCode = point.code.slice(0, -1);
+            let pointX = null;
+            let pointY = null;
+            let pointZ = null;
 
-                if (vars) {
-                    const varsData = {
-                        fmax: vars.fMax.toString(),
-                        rpm: vars.rpm.toString(),
-                        revolution: vars.rev.toString(),
-                    };
-                    if (pointX) detail.vars.push({ ...varsData, pointId: pointX.id.toString() });
-                    if (pointY) detail.vars.push({ ...varsData, pointId: pointY.id.toString() });
-                    if (pointZ) detail.vars.push({ ...varsData, pointId: pointZ.id.toString() });
-                }
+            if (survey.isMonoaxial) {
+                pointX = point;
+            } else {
+                pointX = mawoiInMemory.points.find((p) =>
+                    (p.code == pointCode + "X") || p.code == pointCode + "H"
+                );
+                pointY = mawoiInMemory.points.find((p) =>
+                    (p.code == pointCode + "Y") || p.code == pointCode + "V"
+                );
+                pointZ = mawoiInMemory.points.find((p) =>
+                    (p.code == pointCode + "Z") || p.code == pointCode + "A"
+                );
+            }
 
-                if (pointX) {
-                    collect?.NEXT_X_W?.forEach((value) =>
-                        detail.waveform.push({ pointId: pointX.id, pointCode: pointX.code, measure_y: value })
-                    );
-                    collect?.NEXT_X_S?.forEach((value) =>
-                        detail.spectrum.push({ pointId: pointX.id, pointCode: pointX.code, measure_y: value })
-                    );
-                }
+            if (vars) {
+                const varsData = {
+                    fmax: vars.fMax.toString(),
+                    rpm: vars.rpm.toString(),
+                    revolution: vars.rev.toString(),
+                };
+                if (pointX) detail.vars.push({ ...varsData, pointId: pointX.id.toString() });
+                if (pointY) detail.vars.push({ ...varsData, pointId: pointY.id.toString() });
+                if (pointZ) detail.vars.push({ ...varsData, pointId: pointZ.id.toString() });
+            }
 
-                if (pointY) {
-                    collect?.NEXT_Y_W?.forEach((value) =>
-                        detail.waveform.push({ pointId: pointY.id, pointCode: pointY.code, measure_y: value })
-                    );
-                    collect?.NEXT_Y_S?.forEach((value) =>
-                        detail.spectrum.push({ pointId: pointY.id, pointCode: pointY.code, measure_y: value })
-                    );
-                }
+            if (pointX) {
+                collect?.NEXT_X_W?.forEach((value) =>
+                    detail.waveform.push({ pointId: pointX.id, pointCode: pointX.code, measure_y: value })
+                );
+                collect?.NEXT_X_S?.forEach((value) =>
+                    detail.spectrum.push({ pointId: pointX.id, pointCode: pointX.code, measure_y: value })
+                );
+            }
 
-                if (pointZ) {
-                    collect?.NEXT_Z_W?.forEach((value) =>
-                        detail.waveform.push({ pointId: pointZ.id, pointCode: pointZ.code, measure_y: value })
-                    );
-                    collect?.NEXT_Z_S?.forEach((value) =>
-                        detail.spectrum.push({ pointId: pointZ.id, pointCode: pointZ.code, measure_y: value })
-                    );
-                }
-            });
+            if (pointY) {
+                collect?.NEXT_Y_W?.forEach((value) =>
+                    detail.waveform.push({ pointId: pointY.id, pointCode: pointY.code, measure_y: value })
+                );
+                collect?.NEXT_Y_S?.forEach((value) =>
+                    detail.spectrum.push({ pointId: pointY.id, pointCode: pointY.code, measure_y: value })
+                );
+            }
 
-            return detail;
-        })
-    );
+            if (pointZ) {
+                collect?.NEXT_Z_W?.forEach((value) =>
+                    detail.waveform.push({ pointId: pointZ.id, pointCode: pointZ.code, measure_y: value })
+                );
+                collect?.NEXT_Z_S?.forEach((value) =>
+                    detail.spectrum.push({ pointId: pointZ.id, pointCode: pointZ.code, measure_y: value })
+                );
+            }
+        });
+        result.push(detail);
+
+        // 🌙 Esperar un poco entre encuestas para evitar bloquear el hilo
+        await new Promise((resolve) => setTimeout(resolve, 5));
+    }
 
     return result;
 };

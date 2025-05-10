@@ -712,17 +712,7 @@ export const CorelForceCollectScreen: React.FC<{
         navigation.setOptions({
             headerRight: () => (
                 <View style={styles.row}>
-                    <TouchableOpacity
-                        style={styles.filterButton}
-                        onPress={() => showModalSync()}
-                    >
 
-                        <Icon
-                            name="refresh"
-                            size={16}
-                            style={styles.filterButtonIcon}
-                        />
-                    </TouchableOpacity>
                     <TouchableOpacity
                         style={isSensorConnected ? styles.bluetoothConnectedButton : styles.bluetoothOffButton}
                         onPress={() => showModalScanning()}
