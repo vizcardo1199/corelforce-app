@@ -18,10 +18,10 @@ const SplashScreen: React.FC<{ navigation: any }> = ({navigation}) => {
                             AsyncStorage.getItem('plants')
                                 .then((plants) => {
                                     if(plants) {
-                                        navigation.replace('dashboardOfflineScreen');
+                                        navigation.replace('HomeContainer');
                                         return;
                                     }
-                                    navigation.replace('Login');
+                                    navigation.replace('HomeContainer');
                                 })
                                 .catch((error) => {
                                     navigation.replace('Login');
@@ -29,7 +29,7 @@ const SplashScreen: React.FC<{ navigation: any }> = ({navigation}) => {
                                 })
 
                         } else {
-                            navigation.replace('Login');
+                            navigation.replace('HomeContainer');
                         }
 
                     }

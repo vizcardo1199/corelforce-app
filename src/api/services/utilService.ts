@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import uuid from 'react-native-uuid';
 
 import {
+    API_URL,
     BANDS_INFO_STORE_KEY,
     PARAMS_SPEC, PLANT_SELECTED_KEY, PLANTS_KEY,
     SURVEY_VARIABLES_DEFAULT,
@@ -31,7 +32,27 @@ import {database} from "../../database";
 import {Q} from "@nozbe/watermelondb";
 import {getPointsByAssetId} from "../../services/storage.service.ts";
 import {PointSelect} from "../../types/pointSelect.ts";
+import axios from 'axios';
 
+export const fetchData = async (url: string) => {
+    try {
+
+        const response = await axios({
+            method: 'get',
+            url: url,
+            timeout: 30000,
+        });
+        return response.data;
+    } catch (error: any) {
+        const message =
+            error.response?.data?.message || // mensaje del backend (si lo hay)
+            error.response?.statusText ||   // texto del estado HTTP
+            error.message ||                 // mensaje de Axios
+            'Unknown error';
+
+        throw new Error(`Error in fetchData (${url}): ${message}`);
+    }
+};
 
 export const getSurveyVariables = async (): Promise<SurveyVariables> => {
     const variablesString = await AsyncStorage.getItem(SURVEY_VARIABLES_KEY);

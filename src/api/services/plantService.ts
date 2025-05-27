@@ -1,9 +1,11 @@
 import {GeneralSearchRequest} from '../requests/generalSearchRequest';
 import {PaginationRequest} from '../requests/paginationRequest';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
 // @ts-ignore
 import qs from 'qs';
 import {API_URL} from '../../config/constants';
+import {UnauthorizedError} from "../../errors/UnauthorizedError.ts";
 
 
 export const searchPlant = async (
@@ -21,22 +23,26 @@ export const searchPlant = async (
         const fullUrl = `${API_URL}/plants?${qs.stringify(params)}`;
         console.log(fullUrl);
 
-        const response = await fetch(fullUrl, {
-            method: 'GET',
+        const response = await axios.get(fullUrl, {
             headers: {
                 Authorization: `Bearer ${token}`,
             },
         });
 
-        if (!response.ok) {
-            throw new Error('Error al buscar plants.');
+        return response.data;
+
+    } catch (error: any) {
+        if (axios.isAxiosError(error)) {
+            if (error.response?.status === 401) {
+                throw new UnauthorizedError();
+            }
+
+            console.error('Error en la respuesta del servidor:', error.response?.data);
+            throw new Error(error.response?.data?.message || 'Error al buscar plants.');
         }
 
-        const data = await response.json();
-        return data;
-    } catch (error) {
-        console.error(error);
-        throw new Error('Error al buscar plants.');
+        console.error('Error desconocido:', error);
+        throw new Error('Error inesperado al buscar plants.');
     }
 };
 

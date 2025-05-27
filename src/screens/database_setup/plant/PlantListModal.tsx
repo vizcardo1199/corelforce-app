@@ -2,7 +2,7 @@ import React from 'react';
 import { Modal, View, StyleSheet, TouchableOpacity, Text } from 'react-native';
 import { PlantListScreen } from './PlantListScreen';
 
-export const PlantListModal: React.FC<{download?: boolean; visible: boolean; onClose: () => void; onSelectPlant: (plant: any) => void }> = ({ download, visible, onClose, onSelectPlant }) => {
+export const PlantListModal: React.FC<{download?: boolean; visible: boolean; onClose: () => void; onSelectPlant: (plant: any) => void, navigation: any }> = ({ download, visible, onClose, onSelectPlant, navigation }) => {
     const handlePlantSelect = (plant: any) => {
         onSelectPlant(plant);
         onClose(); // Cierra el modal después de seleccionar la cuenta
@@ -17,7 +17,7 @@ export const PlantListModal: React.FC<{download?: boolean; visible: boolean; onC
         >
             <View style={styles.modalContainer}>
                 <View style={styles.contentContainer}>
-                    <PlantListScreen navigation={{ navigate: handlePlantSelect }} type={download? 'download': 'modal'} />
+                    <PlantListScreen navigation={navigation} type={download? 'download': 'modal'} />
                     {/* Puedes usar la navegación para manejar la selección de la cuenta */}
                     <TouchableOpacity style={styles.closeButton} onPress={onClose}>
                         <Text style={styles.closeButtonText}>Close</Text>

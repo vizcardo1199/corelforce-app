@@ -243,6 +243,7 @@ export const CorelForceHomeScreen: React.FC<{
             <PlantListModal
                 visible={modalPlantVisible}
                 download={true}
+                navigation={navigation}
                 onClose={() => {
                     setModalPlantVisible(false);
                     getPlants();

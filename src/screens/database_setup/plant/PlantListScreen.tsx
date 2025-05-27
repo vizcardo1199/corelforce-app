@@ -40,6 +40,7 @@ import { AccountListModal } from '../account/AccountListModal.tsx';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import {database} from "../../../database";
 import {insertPlantWithAll} from "../../../services/storage.service.ts";
+import {UnauthorizedError} from "../../../errors/UnauthorizedError.ts";
 
 export const PlantListScreen: React.FC<{
   navigation: any;
@@ -69,7 +70,7 @@ export const PlantListScreen: React.FC<{
   const [isSelectMode, setIsSelectMode] = useState<boolean>(false);
   const [selectedItems, setSelectedItems] = useState<number[]>([]);
   const [myState, setMyState] = useState(false);
-
+  const [modalAlertVisible, setModalAlertVisible] = useState(false);
   const [modalAccountVisible, setModalAccountVisible] =
     useState<boolean>(false);
 
@@ -128,6 +129,11 @@ export const PlantListScreen: React.FC<{
     setDescription('');
   };
 
+  const goToLogin = () => {
+    console.log(navigation)
+    navigation.replace('Login');
+    console.log('Go to Login');
+  }
   const clearAccountId = () => {
     account = null;
     setSearchAccountId(null);
@@ -187,6 +193,15 @@ export const PlantListScreen: React.FC<{
         setTotalResults(data.data.total);
       })
       .catch((error) => {
+        if (error instanceof UnauthorizedError) {
+          console.warn('Sesión expirada. Puedes redirigir al login aquí.');
+          setModalAlertVisible(true);
+          // Redirige al login o muestra alerta
+          // Por ejemplo:
+          // navigation.replace('Login');
+          // o
+          // Alert.alert('Sesión expirada', 'Por favor inicia sesión nuevamente');
+        }
         console.error('Error fetching filtered data:', error);
       })
       .finally(() => {
@@ -501,6 +516,22 @@ export const PlantListScreen: React.FC<{
           </View>
         </View>
       </Modal>
+      <Modal animationType="fade" transparent={true} visible={modalAlertVisible}>
+        <View style={styles.modalAlertContainer}>
+          <View style={styles.modalAlertView}>
+            <Text style={styles.modalAlertText}>Sesion expired. Please login again.</Text>
+            <View style={styles.alertButtonContainer}>
+              <TouchableOpacity style={styles.modalAlertButton} onPress={() => setModalAlertVisible(false)}>
+                <Text style={styles.modalAlertButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalAlertButton} onPress={async () => goToLogin()}>
+                <Text style={styles.modalAlertButtonText}>Go to Login</Text>
+              </TouchableOpacity>
+            </View>
+
+          </View>
+        </View>
+      </Modal>
       <Modal animationType="fade" transparent={true} visible={loadingDelete}>
         <View style={styles.loadingModalContainer}>
           <View style={styles.loadingModalView}>
@@ -739,6 +770,43 @@ export const PlantListScreen: React.FC<{
 });
 
 const styles = StyleSheet.create({
+  modalAlertContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalAlertView: {
+    width: 300,
+    padding: 30,
+    backgroundColor: 'white',
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  modalAlertText: {
+    fontSize: 16,
+    color: '#333',
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  alertButtonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  modalAlertButton: {
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    elevation: 2,
+    marginHorizontal: 10,
+    backgroundColor: '#007bff',
+    marginBottom: 10,
+  },
+  modalAlertButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
   container: {
     flex: 1,
     padding: 20,

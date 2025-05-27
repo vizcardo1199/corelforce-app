@@ -1,9 +1,10 @@
 import React, {useCallback, useEffect, useState} from 'react';
+import WifiManager from 'react-native-wifi-reborn';
 import {
     ActivityIndicator,
     Dimensions,
     FlatList,
-    Modal, PermissionsAndroid, Platform,
+    Modal, NativeModules, PermissionsAndroid, Platform,
     ScrollView,
     StyleSheet,
     Text,
@@ -14,6 +15,7 @@ import {
 import Icon from 'react-native-vector-icons/FontAwesome';
 import * as Sentry from '@sentry/react-native';
 import {
+    fetchData,
     findPointForCollectData,
     findPointForCollectDataByCode,
     findPointInCollectData,
@@ -35,8 +37,6 @@ import {deleteCollect, mapByAssetsGroup, saveCollectDataSynced} from '../../api/
 import {SurveySync} from '../../types/survey-sync';
 import {Buffer} from 'buffer';
 import {format, parse} from 'date-fns/index';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import {SurveyStore} from '../../types/survey-store';
 import {Asset} from '../../types/asset';
 import {Point} from '../../types/point';
 import {DRAW_TITLES} from '../../config/constants';
@@ -56,7 +56,8 @@ import BluetoothStateManager from 'react-native-bluetooth-state-manager';
 import {database} from "../../database";
 import {Q} from "@nozbe/watermelondb";
 import {LoadingModalProgress} from "../../components/common/LoadingModalProgress.tsx";
-
+import axios from "axios";
+const { WifiForce } = NativeModules;
 const MOCK_GRAPHS = [+{ id: '1', image: require('../../../assets/location-pin.png') },
     { id: '2', image: require('../../../assets/location-pin.png') },
     { id: '3', image: require('../../../assets/location-pin.png') },
@@ -83,6 +84,10 @@ let convertIndex = {
     NEXT_Z_S: 1,
 };
 
+const ESP32_IP = "http://192.168.4.1";
+const SET_VARIABLES = "command?cmd=SET_VARIABLES";
+const GET_WAVE = "data?eje=EJE&modo=waveform";
+const GET_SPECTRA = "data?eje=EJE&modo=spectrum";
 let receivingData = false;
 let UNIT_W = 1; // 1: Acc, 2: Vel, 3: Disp
 let UNIT_S = 1; // 1: Acc, 2: Vel, 3: Disp
@@ -395,17 +400,84 @@ export const CorelForceCollectScreen: React.FC<{
 
         return resultBuffer.buffer; // Devuelve el ArrayBuffer resultante
     }
-    const collectData = async () => {
+    async function ensureConnectedToESP32  (ssidTarget: string): Promise<boolean> {
+        try {
+            // 🛡️ Solicitar permisos de ubicación en Android
+            if (Platform.OS === 'android') {
+                const granted = await PermissionsAndroid.request(
+                    PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+                );
 
+                if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+                    showModalAlert('⚠️ Permiso de ubicación no concedido');
+                    return false;
+                }
+            }
+
+            // 📶 Obtener SSID actual
+            const currentSSID = await WifiManager.getCurrentWifiSSID();
+            showModalAlert('📶 Conectado a:', currentSSID);
+            return true;
+
+
+
+        } catch (error: any) {
+            showModalAlert('❌ Error al verificar o conectar al ESP32:', error.message);
+            return false;
+        }
+    };
+    const fetchWithFallback = async (url: string) => {
+        try {
+            // 🚀 Primer intento con Axios
+            const axiosResponse = await axios.get(url);
+            showModalAlert("✅ Axios funcionó");
+            return axiosResponse.data;
+        } catch (axiosError: any) {
+            console.warn("⚠️ Axios falló:", axiosError.message);
+
+            try {
+                // 🧪 Segundo intento con Fetch nativo
+                const fetchResponse = await fetch(url);
+                if (!fetchResponse.ok) throw new Error(`HTTP ${fetchResponse.status}`);
+
+                const text = await fetchResponse.text();
+                showModalAlert("✅ Fetch funcionó");
+
+                // Si esperas JSON:
+                try {
+                    return JSON.parse(text); // ← si sabes que debería venir JSON
+                } catch {
+                    return text; // ← si es solo texto plano
+                }
+
+            } catch (fetchError: any) {
+                showModalAlert("❌ Fetch también falló:" + url+ ' - '+ fetchError.message);
+                throw new Error(`Ambas solicitudes fallaron: ${fetchError.message}`);
+            }
+        }
+    };
+
+    const forceWifiUsage = async (): Promise<boolean> => {
+        try {
+            console.log(WifiForce);
+            console.log(NativeModules);
+            const result = await WifiForce.bindToWifi();
+            console.log("✅ Red Wi-Fi forzada:", result);
+            return true;
+        } catch (error: any) {
+            showModalAlert("❌ Error al forzar red Wi-Fi:" + error.message);
+            return false;
+        }
+    };
+    const collectData = async () => {
 
         if(pointSelected == null) {
             showModalAlert('Select a point to collect data');
             return;
         }
-        if (!connectedDevice) {
-            showModalScanning();
-            return;
-        }
+
+        const ok = await forceWifiUsage();
+
         clearGraphs();
 
         let pointInUse = await findPointInCollectData(assetSelected!, pointSelected!);
@@ -416,125 +488,71 @@ export const CorelForceCollectScreen: React.FC<{
 
         setIsReceivingData(true);
         setTextLoading('Connecting...');
-        eventActive = 'NEXT_X';
         await collectDataFromDevice();
     };
 
-    const processData = (data: any) => {
+    const processData = async () => {
+
         try {
-            let message: any;
-            try {
-                message = Buffer.from(data, 'base64').toString('utf-8');
-                // console.log('Datos recibidos:', message);
-            } catch (error) {
-                console.error('Error al procesar datos:', error);
-            }
+            let urlGetWaveform = `${ESP32_IP}/${GET_WAVE}`;
+            let urlGetSpectrum = `${ESP32_IP}/${GET_SPECTRA}`;
 
-            if (message && MARKERS.includes(message)) {
-                console.log('Received data...', message);
-                if (message === 'TIME_DOMAIN') {
-                    console.log('Init data in time domain.');
-                    setTextLoading(`Receiving ${eventActive} data...`);
-                    // updateMessage(eventActive);
-                    currentDataType = 'time_domain';
-                    timeDomainData = [];
-                    partialDataBuffer = new ArrayBuffer(0);
-                } else if (message === 'END_TIME_DOMAIN') {
-                    console.log('End data in time domain.');
-                    currentDataType = null;
-                    partialDataBuffer = new ArrayBuffer(0);
-                    pointWithCollectData[eventActive + '_W'] = timeDomainData;
-                    getDataToDraw(eventActive + '_W').then(() => {
-                        console.log('Data to draw');
-                    }).catch((err) => {
-                        console.log('Error al obtener datos a dibujar', err);
-                    });
-                    // drawAxios(eventActive + "_W"), 100;
-                } else if (message === 'FREQUENCY_DOMAIN') {
-                    console.log('Init data in frequency domain.');
-                    // updateMessage(eventActive);
-                    setTextLoading(`Receiving ${eventActive} data...`);
-                    currentDataType = 'frequency_domain';
-                    frequencyDomainData = [];
-                    partialDataBuffer = new ArrayBuffer(0);
-                } else if (message === 'END_FREQUENCY_DOMAIN') {
-                    console.log('End data in frequency domain.');
-                    currentDataType = null;
-                    partialDataBuffer = new ArrayBuffer(0);
-                    pointWithCollectData[eventActive + '_S'] =
-                        processSpectra(frequencyDomainData);
-                    getDataToDraw(eventActive + '_S').then(() => {
-                        console.log('Data to draw');
-                    }).catch((err) => {
-                        console.log('Error al obtener datos a dibujar', err);
-                    });
-                    // drawAxios(eventActive + "_S"), 100;
-                    receivingData = false;
 
-                    console.log(eventActive);
-                    if (eventActive != 'NEXT_Z') {
-                        // call next function
-                        eventActive = eventActive.includes('_X') ? 'NEXT_Y' : 'NEXT_Z';
-                        // writeOnCharacteristic("NEXT_X");
-                        writeOnSensorCharacteristic(eventActive)
-                            .then(() => {
-                                console.log('NEXT_X sent');
-                            });
+            setTextLoading(`Receiving NEXT_X_W data...`);
 
-                    } else {
-                        console.log('iniciando guardado de datos');
-                        // set storage latest collect data
-                        setLocalStorageLatestCollectData()
-                            .then(() => {
-                                console.log('Datos recolectados guardados en el dispositivo');
-                                setNoDataMeasured(false);
-                            })
-                            .catch((error) => {
-                                Sentry.captureException(error);
-                                console.error('Error al guardar los datos recolectados', error);
-                            })
-                            .finally(() => {
-                                setIsReceivingData(false);
-                                setTextLoading('');
-                                listenerEvent?.remove();
-                            });
+            urlGetWaveform = urlGetWaveform.replace("EJE", "x");
+            pointWithCollectData.NEXT_X_W = await fetchData(urlGetWaveform);
+            urlGetSpectrum = urlGetSpectrum.replace("EJE", "x");
 
-                    }
-                }
-            } else {
-                // Asumir que son datos binarios
-                if (
-                    currentDataType === 'time_domain' ||
-                    currentDataType === 'frequency_domain'
-                ) {
-                    partialDataBuffer = concatBuffers(partialDataBuffer, Buffer.from(data, 'base64'));
+            setTextLoading(`Receiving NEXT_X_S data...`);
+            pointWithCollectData.NEXT_X_S = processSpectra(
+                await fetchData(urlGetSpectrum),
+            );
+            urlGetWaveform = urlGetWaveform.replace("EJE", "y");
 
-                    // Desempaquetar los doubles cuando tengamos suficientes bytes
-                    while (partialDataBuffer.byteLength >= 8) {
-                        const chunk = partialDataBuffer.slice(0, 8);
-                        partialDataBuffer = partialDataBuffer.slice(8);
+            setTextLoading(`Receiving NEXT_Y_W data...`);
 
-                        const miniDataView = new DataView(chunk);
+            pointWithCollectData.NEXT_Y_W = await fetchData(urlGetWaveform);
+            urlGetSpectrum = urlGetSpectrum.replace("EJE", "y");
 
-                        const value = miniDataView.getFloat64(0, true);
+            setTextLoading(`Receiving NEXT_Y_S data...`);
 
-                        if (currentDataType === 'time_domain') {
-                            timeDomainData.push(value);
-                            // console.log("timeDomainData", timeDomainData);
-                        } else if (currentDataType === 'frequency_domain') {
-                            frequencyDomainData.push(value);
-                        }
-                    }
-                } else {
-                    console.log('Datos binarios recibidos sin tipo específico. Ignorando.');
-                }
-            }
+            pointWithCollectData.NEXT_Y_S = processSpectra(
+                await fetchData(urlGetSpectrum),
+            );
+            urlGetWaveform = urlGetWaveform.replace("EJE", "z");
+
+            setTextLoading(`Receiving NEXT_Z_W data...`);
+
+            pointWithCollectData.NEXT_Z_W = await fetchData(urlGetWaveform);
+            urlGetSpectrum = urlGetSpectrum.replace("EJE", "z");
+
+            setTextLoading(`Receiving NEXT_Z_S data...`);
+
+            pointWithCollectData.NEXT_Z_S = processSpectra(
+                await fetchData(urlGetSpectrum),
+            );
+
+            setLocalStorageLatestCollectData()
+                .then(() => {
+                    console.log('Datos recolectados guardados en el dispositivo');
+                    setNoDataMeasured(false);
+                })
+                .catch((error) => {
+                    Sentry.captureException(error);
+                    console.error('Error al guardar los datos recolectados', error);
+                })
+                .finally(() => {
+                    setIsReceivingData(false);
+                    setTextLoading('');
+                    listenerEvent?.remove();
+                });
         }catch (error) {
             Sentry.captureException(error);
             console.error('Error al procesar datos', error);
             setIsReceivingData(false);
             setTextLoading('');
-            listenerEvent?.remove();
+            throw new Error(error.message);
         }
     };
 
@@ -587,7 +605,7 @@ export const CorelForceCollectScreen: React.FC<{
             });
         });
 
-        setDatesMeasured(datesMeasured.concat(fecha));
+        setDatesMeasured(datesMeasured.concat(fecha) );
         setLastCollectedDate(fecha);
         await updatePointMeasurementStatus(pointSelected!, true);
     };
@@ -670,42 +688,43 @@ export const CorelForceCollectScreen: React.FC<{
     };
 
     const collectDataFromDevice = async () => {
-        if (!connectedDevice) {
-            console.log('No se encontró el dispositivo BLE');
-            return;
+        try {
+            const variables = await getSurveyVariables();
+
+
+            let urlSetVariablesBase = `${ESP32_IP}/${SET_VARIABLES}`;
+
+            let urlSetVariables = urlSetVariablesBase.replace(
+                "SET_VARIABLES",
+                "SET_SAMPLES=" + variables.samples,
+            );
+            await fetchData(urlSetVariables);
+            urlSetVariables = urlSetVariablesBase.replace(
+                "SET_VARIABLES",
+                "SET_NLINES=" + variables.lines,
+            );
+            await fetchData(urlSetVariables);
+            urlSetVariables = urlSetVariablesBase.replace(
+                "SET_VARIABLES",
+                "SET_NREVS=" + variables.rev,
+            );
+            await fetchData(urlSetVariables);
+            urlSetVariables = urlSetVariablesBase.replace(
+                "SET_VARIABLES",
+                `SET_FMAX=${variables.fMax}`,
+            );
+            await fetchData(urlSetVariables);
+            urlSetVariables = urlSetVariablesBase.replace(
+                "SET_VARIABLES",
+                `SET_RPM=${variables.rpm}`,
+            );
+            await fetchData(urlSetVariables);
+
+            await processData();
+        }catch(e: any){
+            setModalAlertMessageVisible(true);
+            setModalAlertMessage(e.message);
         }
-
-        await connectedDevice.discoverAllServicesAndCharacteristics();
-
-        listenerEvent = connectedDevice.monitorCharacteristicForService(
-            UUID_BLE_SERVICE,
-            UUID_DATA_CHARACTERISTIC,
-            (error, characteristic) => {
-                if (error) {
-                    console.error('Error al suscribirse a notificaciones:', error.message);
-                    return;
-                }
-
-                if (characteristic && characteristic.value) {
-                    processData(characteristic.value);
-                }
-            }
-        );
-        const variables = await getSurveyVariables();
-        await writeOnSensorCharacteristic(`SET_SAMPLES=${variables.samples}`);
-        await writeOnSensorCharacteristic(`SET_NLINES=${variables.lines}`);
-        await writeOnSensorCharacteristic(`SET_NREVS=${variables.rev}`);
-        await writeOnSensorCharacteristic(`SET_FMAX=${variables.fMax}`);
-        await writeOnSensorCharacteristic(`SET_RPM=${variables.rpm}`);
-        await writeOnSensorCharacteristic('NEXT_X');
-
-    };
-    const writeOnSensorCharacteristic = async (value: string) => {
-        await connectedDevice!.writeCharacteristicWithResponseForService(
-            UUID_BLE_SERVICE,
-            UUID_SENSOR_CHARACTERISTIC,
-            Buffer.from(value, 'utf-8').toString('base64')
-        );
     };
 
     React.useLayoutEffect(() => {
@@ -1307,6 +1326,9 @@ export const CorelForceCollectScreen: React.FC<{
                         <View style={styles.loadingModalContainer}>
                             <View style={styles.loadingModalView}>
                                 <Text style={styles.loadingModalText}>{modalAlertMessage}</Text>
+                                <TouchableOpacity style={styles.closeButton} onPress={() => setModalAlertMessageVisible(false)}>
+                                    <Text style={styles.closeButtonText}>Close</Text>
+                                </TouchableOpacity>
                             </View>
                         </View>
                     </Modal>

@@ -12,6 +12,7 @@ export const ConfigValuesModal: React.FC<{ visible: boolean; onClose: () => void
     const [lines, setLines] = useState<number>(null);
     const [rev, setRev] = useState<number>(null);
     const [samples, setSamples] = useState<number>(null);
+    const [ip, setIp] = useState<string>(null);
     const [waiting, setWaiting] = useState<number>(null);
 
     useEffect(() => {
@@ -20,6 +21,7 @@ export const ConfigValuesModal: React.FC<{ visible: boolean; onClose: () => void
             getSurveyVariables()
                 .then((surveyVariables) => {
                     setRpm(surveyVariables.rpm);
+                    setIp(surveyVariables.ip);
                     setFMax(surveyVariables.fMax);
                     setLines(surveyVariables.lines);
                     setRev(surveyVariables.rev);
@@ -89,6 +91,23 @@ export const ConfigValuesModal: React.FC<{ visible: boolean; onClose: () => void
                 <View style={styles.contentContainer}>
                     <View style={styles.header}>
                         <Text style={styles.headerText}>Configure Values</Text>
+                    </View>
+
+                    <View style={styles.searchContainer}>
+                        <Text
+                            style={[
+                                styles.label
+                            ]}
+                        >
+                            IP
+                        </Text>
+                        <TextInput
+                            style={[
+                                styles.input
+                            ]}
+                            value={ip?.toString()}
+                            onChangeText={(text) => setIp((text))}
+                        />
                     </View>
 
                     <View style={styles.searchContainer}>
