@@ -33,6 +33,7 @@ import {Q} from "@nozbe/watermelondb";
 import {getPointsByAssetId} from "../../services/storage.service.ts";
 import {PointSelect} from "../../types/pointSelect.ts";
 import axios from 'axios';
+import {NetworkError} from "../../errors/NetworkError.ts";
 
 export const fetchData = async (url: string) => {
     try {
@@ -50,7 +51,17 @@ export const fetchData = async (url: string) => {
             error.message ||                 // mensaje de Axios
             'Unknown error';
 
-        throw new Error(`Error in fetchData (${url}): ${message}`);
+        if (axios.isAxiosError(error)) {
+            if (error.message === 'Network Error') {
+                throw new NetworkError('Not connected to the sensor device. Verify your Wi-Fi connection.');
+            }
+            // Puedes manejar otros errores de Axios aquí
+            throw error;
+        } else {
+            // Otro tipo de error que no es de Axios
+            throw new Error(`Error in fetchData (${url}): ${message}`);
+        }
+
     }
 };
 

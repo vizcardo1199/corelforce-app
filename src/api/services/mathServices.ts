@@ -1,3 +1,5 @@
+import {PARAMS_SPEC} from '../../config/constants.ts';
+
 export const roundDecimals = (value: number, decimals: number = 3) => {
     return Math.round(value * 10 ** decimals) / 10 ** decimals;
 };
@@ -121,4 +123,14 @@ export const processBandsInfo = (rpm: number, velocitySpectra: any[] , bandParam
         biv_label: bandParam.label,
         biv_value: value,
     };
+};
+
+export const processSpectra = (arr: any, fixedMultiplier = PARAMS_SPEC.FIXED ) => {
+    fixedMultiplier = fixedMultiplier ?? PARAMS_SPEC.FIXED * 1.14;
+
+
+    const result = arr.map((value) => +value * fixedMultiplier);
+
+    // Convertir el resultado a una cadena separada por comas
+    return result;
 };

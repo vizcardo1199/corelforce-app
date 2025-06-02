@@ -29,6 +29,7 @@ import {
     getSystemConfig,
     processSpectra, updatePointMeasurementStatus,
 } from '../../api/services/utilService';
+import NetInfo from '@react-native-community/netinfo';
 import {CollectData} from '../../types/collect-data';
 import {Picker} from '@react-native-picker/picker';
 import {BleManager, Device, State, Subscription} from 'react-native-ble-plx';
@@ -57,6 +58,11 @@ import {database} from "../../database";
 import {Q} from "@nozbe/watermelondb";
 import {LoadingModalProgress} from "../../components/common/LoadingModalProgress.tsx";
 import axios from "axios";
+import {filterHanning} from "../../services/util.ts";
+import {UnauthorizedError} from "../../errors/UnauthorizedError.ts";
+import {NetworkError} from "../../errors/NetworkError.ts";
+import {check, PERMISSIONS, request, RESULTS} from "react-native-permissions";
+import {NetworkInfo} from "react-native-network-info";
 const { WifiForce } = NativeModules;
 const MOCK_GRAPHS = [+{ id: '1', image: require('../../../assets/location-pin.png') },
     { id: '2', image: require('../../../assets/location-pin.png') },
@@ -494,6 +500,7 @@ export const CorelForceCollectScreen: React.FC<{
     const processData = async () => {
 
         try {
+            const vars = await getSurveyVariables();
             let urlGetWaveform = `${ESP32_IP}/${GET_WAVE}`;
             let urlGetSpectrum = `${ESP32_IP}/${GET_SPECTRA}`;
 
@@ -505,9 +512,9 @@ export const CorelForceCollectScreen: React.FC<{
             urlGetSpectrum = urlGetSpectrum.replace("EJE", "x");
 
             setTextLoading(`Receiving NEXT_X_S data...`);
-            pointWithCollectData.NEXT_X_S = processSpectra(
+            pointWithCollectData.NEXT_X_S = filterHanning(processSpectra(
                 await fetchData(urlGetSpectrum),
-            );
+            ), vars.lines);
             urlGetWaveform = urlGetWaveform.replace("EJE", "y");
 
             setTextLoading(`Receiving NEXT_Y_W data...`);
@@ -517,9 +524,9 @@ export const CorelForceCollectScreen: React.FC<{
 
             setTextLoading(`Receiving NEXT_Y_S data...`);
 
-            pointWithCollectData.NEXT_Y_S = processSpectra(
+            pointWithCollectData.NEXT_Y_S = filterHanning(processSpectra(
                 await fetchData(urlGetSpectrum),
-            );
+            ), vars.lines);
             urlGetWaveform = urlGetWaveform.replace("EJE", "z");
 
             setTextLoading(`Receiving NEXT_Z_W data...`);
@@ -529,9 +536,9 @@ export const CorelForceCollectScreen: React.FC<{
 
             setTextLoading(`Receiving NEXT_Z_S data...`);
 
-            pointWithCollectData.NEXT_Z_S = processSpectra(
+            pointWithCollectData.NEXT_Z_S = filterHanning(processSpectra(
                 await fetchData(urlGetSpectrum),
-            );
+            ), vars.lines);
 
             setLocalStorageLatestCollectData()
                 .then(() => {
@@ -687,10 +694,36 @@ export const CorelForceCollectScreen: React.FC<{
 
     };
 
+    const isWifiConnected = async () => {
+        const permission = PERMISSIONS.ANDROID.ACCESS_FINE_LOCATION;
+        let granted = false;
+
+        const currentStatus = await check(permission);
+        if (currentStatus === RESULTS.GRANTED) {
+            granted = true;
+        } else {
+            const result = await request(permission);
+            if (result === RESULTS.GRANTED) {
+                granted = true;
+            }
+        }
+
+        if (!granted) {return false;}
+
+        const state = await NetInfo.fetch();
+        return state.type === 'wifi';
+    };
     const collectDataFromDevice = async () => {
         try {
             const variables = await getSurveyVariables();
 
+            const isConnected = await isWifiConnected();
+            if (!isConnected) {
+                setModalAlertMessage('Device is not connected to Wi-Fi');
+
+                setIsReceivingData(false);
+                return;
+            }
 
             let urlSetVariablesBase = `${ESP32_IP}/${SET_VARIABLES}`;
 
@@ -722,9 +755,24 @@ export const CorelForceCollectScreen: React.FC<{
 
             await processData();
         }catch(e: any){
-            setModalAlertMessageVisible(true);
-            setModalAlertMessage(e.message);
+            if (e instanceof NetworkError) {
+                await showWifiInfo();
+            } else {
+                setModalAlertMessageVisible(true);
+                setModalAlertMessage(e.message);
+            }
+            setIsReceivingData(false);
         }
+    };
+
+    const showWifiInfo = async () => {
+        const ssid = await NetworkInfo.getSSID();
+        const message = ssid && ssid !== 'unknown ssid'
+            ? 'Device is unreachable. The current Wi-Fi network is: ' + ssid
+            : 'No Wi-Fi network detected.';
+
+        setModalAlertMessage(message);
+        setModalAlertMessageVisible(true);
     };
 
     React.useLayoutEffect(() => {
